@@ -1,15 +1,15 @@
-! ============================================================================
+! ==========================================
 !  Program:     /Users/mandli/Documents/School/grad/ns_course
 !  File:        projection_method
 !  Created:     2010-05-02
 !  Author:      Kyle Mandli
-! ============================================================================
+! =========================================
 !      Copyright (C) 2010-05-02 Kyle Mandli <mandli@amath.washington.edu>
 !
 !  Distributed under the terms of the Berkeley Software Distribution (BSD)
 !  license
 !                     http://www.opensource.org/licenses/
-! ============================================================================
+! ========================================
 
 module grid_module
 
@@ -126,18 +126,18 @@ contains
 
 end module grid_module
 
-! ============================================================================
+! =========================================
 !  Program:     /Users/mandli/Documents/School/grad/ns_course
 !  File:        main
 !  Created:     2010-05-02
 !  Author:      Kyle Mandli
-! ============================================================================
+! ========================================
 !      Copyright (C) 2010-05-02 Kyle Mandli <mandli@amath.washington.edu>
 !
 !  Distributed under the terms of the Berkeley Software Distribution (BSD)
 !  license
 !                     http://www.opensource.org/licenses/
-! ============================================================================
+! =========================================
 
 program main
 
@@ -145,24 +145,24 @@ program main
 
     implicit none
 
-    ! ========================================================================
+    ! ====================================
     ! Solver parameters
     integer, parameter :: MAX_ITERATIONS = 4000
     double precision, parameter :: TOLERANCE = 1.d-4, CFL = 0.8d0
     logical, parameter :: write_star = .false.
     integer :: n_steps
 
-    ! ========================================================================
+    ! ===================================
     ! Physics
     double precision :: U_inf = 1.d0
     double precision :: rho,nu,Re !rho = 1.d0, nu=1.d-3
 
-    ! ========================================================================
+    ! ===================================
     ! Velocity and pressures
     double precision, allocatable :: u(:,:),v(:,:),p(:,:),u_star(:,:),v_star(:,:)
     double precision, allocatable :: u_old(:,:), v_old(:,:)
 
-    ! ========================================================================
+    ! ===================================
     ! Locals
     character*20 :: arg
     integer :: i,j,n,m,frame,i_R,j_R
@@ -170,7 +170,7 @@ program main
     double precision, allocatable :: Flux_ux(:,:),Flux_uy(:,:),Flux_vy(:,:)
     double precision :: uu_x,uv_y,uv_x,vv_y,u_xx,u_yy,v_xx,v_yy
     double precision, allocatable :: Q(:,:),b(:),cp(:),cm(:)
-    ! ========================================================================
+    ! ===================================
 
     ! Get command line arguments
 !    if (iargc() /= 6) then
@@ -217,7 +217,7 @@ program main
     print "(a,i4,a)"," Output every ",n_steps," steps"
     print "(a,e16.8)"," Reynold's number = ",Re
 
-    ! ========================================================================
+    ! ===================================
     ! Setup grid and arrays
     call setup_grid()
     allocate(Flux_ux(1:N_x+1,0:N_y+1))
@@ -258,18 +258,18 @@ program main
     ! Open up file to store residual information in
     open(unit=13, file='residual.dat', status="unknown", action="write")
 
-    ! ========================================================================
+    ! ===================================
     ! Main algorithm loop
     do n=1,MAX_ITERATIONS
         ! Store old step for convergence test
         u_old = u(1:N_x,1:N_y)
         v_old = v(1:N_x,1:N_y)
 
-        ! ====================================================================
+    ! ===================================
         ! Apply BC  V = x, U = o, P = +
         call bc(u,v,U_inf)
 
-        ! ====================================================================
+    ! ===================================
         ! Step 1: Update velocity to intermediate step
         ! Calculate fluxes at each boundary
         !
@@ -329,7 +329,7 @@ program main
             call output_grid(frame,t,u_star,v_star,p)
         endif
 
-        ! ====================================================================
+    ! ===================================
         ! Step 2: Solve projection poisson problem
         call bc(u_star,v_star,U_inf)
         forall(i=1:N_x,j=1:N_y)
@@ -339,7 +339,7 @@ program main
         ! Solve poisson problem
         call solve_poisson(p,Q,a,b,cm,cp)
 
-        ! ====================================================================
+    ! ===================================
         ! Step 3: Update velocities to end time
         !**********************************************
         !***  ADD RHS TO VELOCITY UPDATE FORLUMAS:  ***
@@ -351,7 +351,7 @@ program main
             v(i,j) = v_star(i,j) - dt * (p(i,j+1) - p(i,j)) * F_edge(j) / dzeta
         end forall
 
-        ! ====================================================================
+    ! ===================================
         ! Step 4: Check convergence
         R = 0.d0
         do j=1,N_y
@@ -391,9 +391,9 @@ program main
 end program main
 
 
-! ============================================================================
+! ===================================
 ! Boundary Conditions
-! ============================================================================
+! ===================================
 
 subroutine bc(u,v,U_inf)
 
@@ -457,11 +457,10 @@ subroutine bc(u,v,U_inf)
 end subroutine bc
 
 
-! ============================================================================
+! ===================================
 ! Solve the poisson problem
 !  laplace(P)_ij = Q_ij
-! ============================================================================
-
+! ===================================
 subroutine solve_poisson(P,Q,a,b,cm,cp)
 
     use grid_module

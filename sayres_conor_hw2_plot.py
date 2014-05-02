@@ -1,13 +1,15 @@
 import numpy
+import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.mlab as ml
+matplotlib.use('Agg')
 # from matplotlib import rc
 # rc('text', usetex=True)
 # rc('font', family='serif')
 
-class Plotter(object):
+class DataMuncher(object):
     def __init__(self, udpFile, residualFile):
-        """Object for interacting with fortran code output, various plotting methods
+        """Object for interacting with fortran code output, various plotting methods, etc.
 
         @param[in] udpFile: string, path to [udpFile].dat, output from fortran routine
         @param[in] residualFile: string, path
@@ -75,7 +77,7 @@ class Plotter(object):
     def plotResidSemiLog(self, figName):
         """Plot the residual vs number of steps
         """
-        plt.figure()
+        # plt.figure()
         plt.plot(self.residMat[:,0], numpy.log(self.residMat[:,-1]))
         plt.xlabel("Step Number")
         plt.ylabel("Log Residual")
@@ -91,7 +93,7 @@ class Plotter(object):
         """
         # grab the 2D matrix to plot
         assert u_v_or_p in ["u", "v", "p"]
-        fig = plt.figure()
+        # fig = plt.figure()
         uvpIndDict = {
             "u": 2,
             "v": 3,
@@ -106,8 +108,8 @@ class Plotter(object):
         # x = x[::100]
         # y = y[::100]
         # z = z[::100]
-        xi = numpy.linspace(min(x), max(x), 100)
-        yi = numpy.linspace(min(y), max(y), 100)
+        xi = numpy.linspace(min(x), max(x), 1000)
+        yi = numpy.linspace(min(y), max(y), 2000)
         cmap = plt.get_cmap('winter')
         X, Y = numpy.meshgrid(xi, yi)
         Z = ml.griddata(x, y, z, xi, yi)
@@ -116,6 +118,7 @@ class Plotter(object):
         # note
         plt.contourf(X, Y, Z, cmap=cmap)#, norm=norm)
         plt.colorbar()
+        plt.title(figTitle)
         # im = plt.imshow(value)
         plt.savefig(figName + '.eps', format='eps')
         # plt.show()
@@ -123,11 +126,12 @@ class Plotter(object):
 def makeFigures():
     """Create all the figures for homework 2.
     """
-    x = Plotter(udpFile = "run2/UVP_coarse.dat", residualFile = "run2/residual_coarse.dat")
-    x.plotResidSemiLog("resid")
-    x.plotColorMap(-1, 'u', "uCoarse", "u coarse grid")
-    x.plotColorMap(-1, 'v', "vCoarse", "v coarse grid")
-    x.plotColorMap(-1, 'p', "pCoarse", "p coarse grid")
+    for grid in ['coarse', 'med', 'fine']:
+        x = DataMuncher(udpFile = "run2/UVP_" + grid + ".dat", residualFile = "run2/residual_" + grid + ".dat")
+        x.plotResidSemiLog("resid_" + grid)
+        x.plotColorMap(-1, 'u', "u_" + grid, "u " + grid  + " grid")
+        x.plotColorMap(-1, 'v', "v_" + grid, "v " + grid  + " grid")
+        x.plotColorMap(-1, 'p', "p_" + grid, "p " + grid  + " grid")
 
 if __name__ == "__main__":
     makeFigures()
