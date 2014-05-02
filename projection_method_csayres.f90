@@ -16,7 +16,7 @@ module grid_module
     implicit none
 
     ! Grid parameters
-    integer :: N_x,N_y
+    integer :: N_x,N_y, N_leadIn
     integer, parameter :: mbc = 1
     double precision, parameter :: gamma = 0.66d0
     double precision :: L_x,L_y,dx,dzeta
@@ -147,7 +147,7 @@ program main
 
     ! ========================================================================
     ! Solver parameters
-    integer, parameter :: MAX_ITERATIONS = 10000
+    integer, parameter :: MAX_ITERATIONS = 4000
     double precision, parameter :: TOLERANCE = 1.d-4, CFL = 0.8d0
     logical, parameter :: write_star = .false.
     integer :: n_steps
@@ -203,8 +203,9 @@ program main
 !!  Parameters: !!
 !!!!!!!!!!!!!!!!!!
 
-    N_x=200  !Number of grid points in x-direction
-    N_y=80   !Number of grid points in y-direction
+    N_x=200*4  !Number of grid points in x-direction
+    N_y=80*4   !Number of grid points in y-direction
+    N_leadIn = 80*4 !Number of grid points before wall boundary
     L_x=10.0 !Length of box in x-direction
     L_y=4.0  !Length of box in y-direction
     n_steps=20 !Interval that u,v and p are printed to UVP.dat
@@ -246,6 +247,9 @@ program main
     dt = CFL * dx / (Re * U_inf)
     t = 0.d0
     frame = 0
+
+    nu = 1.d-3 !1.d0/Re
+    rho = 1.d0
 
     ! Output inital condition
     call output_grid(frame,t,u,v,p)
@@ -293,18 +297,15 @@ program main
         forall (i=1:N_x+1,j=0:N_y+1) Flux_ux(i,j) = (u(i-1,j)+u(i,j))**2 / 4.d0
         forall (i=0:N_x,j=0:N_y) Flux_uy(i,j) = (u(i,j)+u(i,j+1)) * (v(i+1,j)+v(i,j)) / 4.d0
         forall (i=0:N_x+1,j=0:N_y) Flux_vy(i,j) = (v(i,j+1) + v(i,j))**2 / 4.d0
-
         do j=1,N_y
             do i=1,N_x
-
 !********************************************
 !***  ADD RHS TO THE FOLLOWING FORMULAS:  ***
 !********************************************
-                !print *, "i", i, "j ", j, "F_edge(j) ", F_edge(j), "F_center(j)", F_center(j)
                 ! Advective terms, see Lecture 4 notes, page 12
                 ! Grid stretching function defined above F(zeta), F_center
                 uu_x = (Flux_ux(i+1,j) - Flux_ux(i,j)) / dx
-                uv_y = F_center(j) * (Flux_uy(i,j) - Flux_uy(i,j-1)) / dzeta ! typo in lecture notes deta vs dz?
+                uv_y = F_center(j) * (Flux_uy(i,j) - Flux_uy(i,j-1)) / dzeta !
 
                 uv_x = (Flux_uy(i,j) - Flux_uy(i-1,j)) / dx
                 vv_y = F_edge(j) * (Flux_vy(i,j) - Flux_vy(i,j-1)) / dzeta
@@ -312,14 +313,14 @@ program main
                 ! Diffusive terms
                 u_xx = (u(i+1,j) - 2*u(i,j) + u(i-1,j)) / (dx**2)
                 u_yy = (F_center(j) / dzeta**2) * (F_edge(j) * (u(i,j+1) - u(i,j)) - F_edge(j-1) * (u(i,j) - u(i,j-1))) !edge leads center by 0.5, verify by looking at poisson solver
-                v_xx = (v(i+1,j) - 2*v(i,j) + v(i-1,j)) / (dx**2)
+                v_xx = (v(i+1,j) - 2.d0*v(i,j) + v(i-1,j)) / (dx**2)
                 v_yy = (F_edge(j) / dzeta**2) * (F_center(j+1) * (v(i,j+1) - v(i,j)) - F_center(j) * (v(i,j) - v(i,j-1)))
 
                 ! Update to u* and v* values
-                u_star(i,j) = u(i,j) + dt * (-1*(uu_x + uv_y) + u_xx + u_yy)
-                v_star(i,j) = v(i,j) + dt * (-1*(uv_x+vv_y) + v_xx + v_yy)
-            continue
-        continue
+                u_star(i,j) = u(i,j) + dt * (-1*(uu_x + uv_y) + nu*(u_xx + u_yy))
+                v_star(i,j) = v(i,j) + dt * (-1*(uv_x+vv_y) + nu*(v_xx + v_yy))
+            end do
+        end do
 
         ! Debug, save out u_star,v_star,p
         if (write_star) then
@@ -332,7 +333,7 @@ program main
         ! Step 2: Solve projection poisson problem
         call bc(u_star,v_star,U_inf)
         forall(i=1:N_x,j=1:N_y)
-            ! page 16 lecture 4 notes, has v_star(i,j) - v_star(i,j-1)
+            ! page 16 lecture 4 notes
             Q(i,j) = 1.d0/dt * ((u_star(i,j)-u_star(i-1,j)) / dx + (v_star(i,j)-v_star(i,j-1)) / dzeta * F_center(j))
         end forall
         ! Solve poisson problem
@@ -347,7 +348,7 @@ program main
         forall (i=1:N_x,j=1:N_y)
             ! appears rho is 1.d0 from Q matrix
             u(i,j) = u_star(i,j) - dt * (p(i+1,j) - p(i,j)) / dx
-            v(i,j) = v_star(i,j) - dt * (p(i,j+1) - p(i,j)) * (F_edge(j) / dzeta)
+            v(i,j) = v_star(i,j) - dt * (p(i,j+1) - p(i,j)) * F_edge(j) / dzeta
         end forall
 
         ! ====================================================================
@@ -362,7 +363,6 @@ program main
                 endif
             enddo
         enddo
-
         ! Finish up loop
         print "(a,i4,a,i3,a,i3,a,e16.8)","Loop ",n,": (",i_R,",",j_R,") - R = ",R
         write (13,"(i4,i4,i4,e16.8)") n,i_R,j_R,R
@@ -373,20 +373,20 @@ program main
             print "(a,i3,a,i4,a,e16.8)","Writing frame ",frame," during step n=",n," t=",t
         endif
         ! Check tolerance
-        if (R < TOLERANCE) then
-            print *, "Convergence reached, R = ",R
-    call output_grid(frame,t,u,v,p)
-    print "(a,i3,a,i4,a,e16.8)","Writing frame ",frame," during step n=",n," t=",t
-            exit
-        endif
+!        if (R < TOLERANCE) then
+!            print *, "Convergence reached, R = ",R
+!            call output_grid(frame,t,u,v,p)
+!            print "(a,i3,a,i4,a,e16.8)","Writing frame ",frame," during step n=",n," t=",t
+!            exit
+!        endif
         ! We did not reach our tolerance, iterate again
         t = t + dt
     enddo
     if (R > TOLERANCE) then
         print "(a,e16.8)","Convergence was never reached, R = ", R
     endif
-!    call output_grid(frame,t,u,v,p)
-!    print "(a,i3,a,i4,a,e16.8)","Writing frame ",frame," during step n=",n," t=",t
+!    call output_grid(frame,t,u,v,p) ! ouput last grid?
+    print "(a,i3,a,i4,a,e16.8)","Tolerance reaced!, Writing frame ",frame," during step n=",n," t=",t
     close(13)
 end program main
 
@@ -428,6 +428,12 @@ subroutine bc(u,v,U_inf)
         v(i,0) = 0.d0
         u(i,N_y+1) = u(i,N_y)
         v(i,N_y+1) = v(i,N_y)
+    end forall
+    ! overwrite the lead-in
+    ! boundary to have a slip condition
+    forall(i=0:N_leadIn)
+        u(i,0) = u(i,1)
+        v(i,0) = v(i,1)
     end forall
     ! Left Boundaries
     !   x 0,j  |      x 1,j
@@ -488,6 +494,10 @@ subroutine solve_poisson(P,Q,a,b,cm,cp)
             P(i,0) = P(i,1)        ! Bottom wall
             P(i,N_y+1) = 0.d0      ! Free stream
         end forall
+        ! add in the lead-in bit
+        forall (i=0:N_leadIn)
+            P(i,0) = 0.d0 !Bottom wall acts like free stream
+        end forall
         do j=1,N_y
             do i=1,N_x
                 ! Update p
@@ -499,7 +509,7 @@ subroutine solve_poisson(P,Q,a,b,cm,cp)
                 R = max(R,abs(P(i,j)-P_old))
             enddo
         enddo
-
+        !print *, "R: ", R
         ! Print out convergence and exit
         if (verbose) then
             print "(a,i5,a,e16.8,a)", "(",n,",",R,")"
@@ -512,9 +522,10 @@ subroutine solve_poisson(P,Q,a,b,cm,cp)
     if (n > MAX_ITERATIONS) then
         print *,"Poisson solver did not converge, exiting!"
         print "(a,e16.8)","R = ",R
+        print *,"iteration: ", n
         stop
     else
-        print "(a,i4,a,e16.8)", "Solver converged in ",n," steps: R = ",R
+        print "(a,i6,a,e16.8)", "Solver converged in ",n," steps: R = ",R
         ! Boundary conditions
         forall (j=0:N_y+1)
             P(0,j) = P(1,j)        ! Left
