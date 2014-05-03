@@ -208,7 +208,7 @@ program main
     N_leadIn = 80*4 !Number of grid points before wall boundary
     L_x=10.0 !Length of box in x-direction
     L_y=4.0  !Length of box in y-direction
-    n_steps=20 !Interval that u,v and p are printed to UVP.dat
+    n_steps=2000 !Interval that u,v and p are printed to UVP.dat
     Re=100.0   !Reynolds number
 
     print *,"Running blasius with following parameters: "
@@ -373,20 +373,20 @@ program main
             print "(a,i3,a,i4,a,e16.8)","Writing frame ",frame," during step n=",n," t=",t
         endif
         ! Check tolerance
-!        if (R < TOLERANCE) then
-!            print *, "Convergence reached, R = ",R
-!            call output_grid(frame,t,u,v,p)
-!            print "(a,i3,a,i4,a,e16.8)","Writing frame ",frame," during step n=",n," t=",t
-!            exit
-!        endif
+        if (R < TOLERANCE) then
+            print *, "Convergence reached, R = ",R
+            call output_grid(frame,t,u,v,p)
+            print "(a,i3,a,i4,a,e16.8)","Writing frame ",frame," during step n=",n," t=",t
+            exit
+        endif
         ! We did not reach our tolerance, iterate again
         t = t + dt
     enddo
     if (R > TOLERANCE) then
         print "(a,e16.8)","Convergence was never reached, R = ", R
     endif
-!    call output_grid(frame,t,u,v,p) ! ouput last grid?
-    print "(a,i3,a,i4,a,e16.8)","Tolerance reaced!, Writing frame ",frame," during step n=",n," t=",t
+    call output_grid(frame,t,u,v,p) ! ouput last grid?
+!    print "(a,i3,a,i4,a,e16.8)","Tolerance reaced!, Writing frame ",frame," during step n=",n," t=",t
     close(13)
 end program main
 
