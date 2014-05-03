@@ -221,27 +221,36 @@ class DataMuncher(object):
         plt.savefig(figName + '.eps', format='eps')
         plt.close()
 
-    def plotSkinFriction(self, timeStep):
+    def plotSkinFriction(self, timeStep, figName):
         """calculate the skin friction coefficient (but only on the wall section)
         average across all x greater than half way through the flow at the y = 0 boundary
         """
-        x, y, z = self.getXYZ(timeStep, "u")
+        x, y, u = self.getXYZ(timeStep, "u")
         # keep only values where x is > than half way, ensuring we're on the wall
-        print 'x leng/2', len(x)/2, x[len(x)/2]
-        inds = numpy.nonzero(x>x[len(x)/2])[0]
+        inds = numpy.nonzero(x>numpy.mean(x))[0]
         x = x[inds]
         y = y[inds]
-        z = z[inds]
+        u = u[inds]
         # next keep only inds of y_i = 1
-        inds = numpy.nonzero(y==y[0])[0]
+        inds = numpy.nonzero(y==y[1])[0]
+        print 'y[1]', y[1]
         x = x[inds]
         y = y[inds]
-        z = z[inds]
+        u = u[inds]
         # take the ratio along the boundary and plot it against x
-        sf = z / y
+        sf = u / y
         plt.figure()
-        plt.plot(range(len(x)), x, 'o')
-        plt.show()
+        plt.plot(x, sf)
+        plt.xlabel("x position")
+        plt.ylabel("Skin Coeff")
+        expected = 0.664*(100)**-0.5
+        computed = numpy.mean(sf)
+
+        print figName, "skin coeff", numpy.mean(sf),  (computed - expected)/expected
+        # plt.plot([min(x), max(x)], [analySkValue, analySkValue], 'r')
+        plt.savefig(figName + '.eps', format='eps')
+        plt.close()
+        # plt.show()
 
 
 
@@ -250,17 +259,17 @@ class DataMuncher(object):
 def makeFigures():
     """Create all the figures for homework 2.
     """
-    for grid in ['fine']:#['coarse', 'med', 'fine']:
+    for grid in ['coarse', 'med', 'fine']:
         x = DataMuncher(udpFile = "run2/UVP_" + grid + ".dat", residualFile = "run2/residual_" + grid + ".dat")
-        # x.plotResidSemiLog("resid_" + grid)
-        # x.plotColorMap(-1, 'u', "u_" + grid, "u (" + grid  + " grid)")
-        # x.plotColorMap(-1, 'v', "v_" + grid, "v (" + grid  + " grid)")
-        # x.plotColorMap(-1, 'p', "p_" + grid, "p (" + grid  + " grid)")
-        # x.plotBlas1(-1, "blas1_" + grid)
-        # x.plotBlas2(-1, "blas2_" + grid)
-        # x.plotBlas3(-1, "blas3_" + grid)
-        # x.plotBlas4(-1, "blas4_" + grid)
-        x.plotSkinFriction(-1)
+        x.plotResidSemiLog("resid_" + grid)
+        x.plotColorMap(-1, 'u', "u_" + grid, "u (" + grid  + " grid)")
+        x.plotColorMap(-1, 'v', "v_" + grid, "v (" + grid  + " grid)")
+        x.plotColorMap(-1, 'p', "p_" + grid, "p (" + grid  + " grid)")
+        x.plotBlas1(-1, "blas1_" + grid)
+        x.plotBlas2(-1, "blas2_" + grid)
+        x.plotBlas3(-1, "blas3_" + grid)
+        x.plotBlas4(-1, "blas4_" + grid)
+        x.plotSkinFriction(-1, "sf_" + grid)
 if __name__ == "__main__":
     makeFigures()
 
