@@ -203,12 +203,12 @@ program main
 !!  Parameters: !!
 !!!!!!!!!!!!!!!!!!
 
-    N_x=200*4  !Number of grid points in x-direction
-    N_y=80*4   !Number of grid points in y-direction
-    N_leadIn = 80*4 !Number of grid points before wall boundary
+    N_x=20  !Number of grid points in x-direction
+    N_y=20   !Number of grid points in y-direction
+    N_leadIn = 5 !Number of grid points before wall boundary
     L_x=10.0 !Length of box in x-direction
-    L_y=4.0  !Length of box in y-direction
-    n_steps=2000 !Interval that u,v and p are printed to UVP.dat
+    L_y=1.0  !Length of box in y-direction
+    n_steps=500 !Interval that u,v and p are printed to UVP.dat
     Re=100.0   !Reynolds number
 
     print *,"Running blasius with following parameters: "
@@ -248,7 +248,7 @@ program main
     t = 0.d0
     frame = 0
 
-    nu = 1.d-3 !1.d0/Re
+    nu = 1.d0/Re !1.d-3 !1.d0/Re
     rho = 1.d0
 
     ! Output inital condition

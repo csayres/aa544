@@ -134,6 +134,14 @@ class DataMuncher(object):
         plt.close()
         # plt.show()
 
+    def plotQuiver(self, timeStep):
+        plt.figure()
+        x,y,z1 = self.getXYZ(timeStep, "u")
+        x,y,z2 = self.getXYZ(timeStep, "v")
+        plt.quiver(x,y,z1,z2)
+        plt.show()
+
+
     def plotBlasExact(self):
         """Plot an exact blas profile
         values taken directly from Hirsch.
@@ -244,7 +252,7 @@ class DataMuncher(object):
         plt.xlabel("x position")
         plt.ylabel("Skin Coeff")
         expected = 0.664*(100)**-0.5
-        computed = numpy.mean(sf)
+        computed = 2.*numpy.mean(sf)*(1.**-3.)
 
         print figName, "skin coeff", numpy.mean(sf),  (computed - expected)/expected
         # plt.plot([min(x), max(x)], [analySkValue, analySkValue], 'r')
@@ -261,15 +269,18 @@ def makeFigures():
     """
     for grid in ['coarse', 'med', 'fine']:
         x = DataMuncher(udpFile = "run2/UVP_" + grid + ".dat", residualFile = "run2/residual_" + grid + ".dat")
-        x.plotResidSemiLog("resid_" + grid)
-        x.plotColorMap(-1, 'u', "u_" + grid, "u (" + grid  + " grid)")
-        x.plotColorMap(-1, 'v', "v_" + grid, "v (" + grid  + " grid)")
-        x.plotColorMap(-1, 'p', "p_" + grid, "p (" + grid  + " grid)")
-        x.plotBlas1(-1, "blas1_" + grid)
-        x.plotBlas2(-1, "blas2_" + grid)
-        x.plotBlas3(-1, "blas3_" + grid)
-        x.plotBlas4(-1, "blas4_" + grid)
+        # x.plotResidSemiLog("resid_" + grid)
+        # x.plotColorMap(-1, 'u', "u_" + grid, "u (" + grid  + " grid)")
+        # x.plotColorMap(-1, 'v', "v_" + grid, "v (" + grid  + " grid)")
+        # x.plotColorMap(-1, 'p', "p_" + grid, "p (" + grid  + " grid)")
+        # x.plotBlas1(-1, "blas1_" + grid)
+        # x.plotBlas2(-1, "blas2_" + grid)
+        # x.plotBlas3(-1, "blas3_" + grid)
+        # x.plotBlas4(-1, "blas4_" + grid)
         x.plotSkinFriction(-1, "sf_" + grid)
+
 if __name__ == "__main__":
-    makeFigures()
+    # makeFigures()
+    x = DataMuncher(udpFile="_output/UVP.dat", residualFile="run2/residual_coarse.dat")
+    x.plotQuiver(-2)
 
