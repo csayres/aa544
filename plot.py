@@ -134,7 +134,7 @@ class DataMuncher(object):
         @param[in] figName: name of the figure
         @param[in] figTitle: title for the figure
         """
-        # plt.figure()
+        plt.figure(aspect="equal")
         # grab the 2D matrix to plot
         plt.hold(True)
 

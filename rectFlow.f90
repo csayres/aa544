@@ -408,11 +408,12 @@ program main
     allocate(vstar_lagF(1:(n_lagrangian_points)))
 
     ! Inital conditions
-    u = U_inf
+    !u = U_inf
+    u = 0.d0
     v = 0.d0
     p = 0.d0
     !dt = CFL * h / (Re * U_inf) / 5.d0
-    dt = h / 100.d0
+    dt = h / 200.d0
     t = 0.d0
     frame = 0
 
@@ -528,7 +529,7 @@ program main
             enddo
         enddo
 
-        call output_force_grid(frame,t,u_star,v_star)
+        !call output_force_grid(frame,t,u_star,v_star)
 
     ! ===================================
         ! Solve projection poisson problem
@@ -551,16 +552,17 @@ program main
 
     ! ===================================
         ! Check convergence
-        R = 0.d0
-        do j=1,N_y
-            do i=1,N_x
-                if (R < abs(u(i,j)-u_old(i,j)) .or. R < abs(v(i,j)-v_old(i,j))) then
-                    R = max(R,abs(u(i,j)-u_old(i,j)),abs(v(i,j)-v_old(i,j)))
-                    i_R = i
-                    j_R = j
-                endif
-            enddo
-        enddo
+        !R = 0.d0
+        !do j=1,N_y
+        !    do i=1,N_x
+         !       if (R < abs(u(i,j)-u_old(i,j)) .or. R < abs(v(i,j)-v_old(i,j))) then
+         !           R = max(R,abs(u(i,j)-u_old(i,j)),abs(v(i,j)-v_old(i,j)))
+         !           i_R = i
+         !           j_R = j
+         !       endif
+         !   enddo
+        !enddo
+
         ! Finish up loop
         !print "(a,i4,a,i3,a,i3,a,e16.8)","Loop ",n,": (",i_R,",",j_R,") - R = ",R
         !write (13,"(i4,i4,i4,e16.8)") n,i_R,j_R,R
@@ -571,18 +573,18 @@ program main
             print "(a,i3,a,i4,a,e16.8)","Writing frame ",frame," during step n=",n," t=",t
         endif
         ! Check tolerance
-        if (R < TOLERANCE) then
-            print *, "Convergence reached, R = ",R
-            call output_grid(frame,t,u,v,p)
-            print "(a,i3,a,i4,a,e16.8)","Writing frame ",frame," during step n=",n," t=",t
-            exit
-        endif
+        !if (R < TOLERANCE) then
+        !    print *, "Convergence reached, R = ",R
+        !    call output_grid(frame,t,u,v,p)
+        !    print "(a,i3,a,i4,a,e16.8)","Writing frame ",frame," during step n=",n," t=",t
+        !    exit
+        !endif
         ! We did not reach our tolerance, iterate again
         t = t + dt
     enddo
-    if (R > TOLERANCE) then
-        print "(a,e16.8)","Convergence was never reached, R = ", R
-    endif
+    !if (R > TOLERANCE) then
+    !    print "(a,e16.8)","Convergence was never reached, R = ", R
+    !endif
     call output_grid(frame,t,u,v,p) ! ouput last grid?
 !    print "(a,i3,a,i4,a,e16.8)","Tolerance reaced!, Writing frame ",frame," during step n=",n," t=",t
     !close(13)
@@ -641,6 +643,7 @@ subroutine bc(u,v,U_inf)
     !     + N_x,j   o N_x,j   + N_x+1,j  o N_x+1,j  p(N_x+1,j) = p(N_x,j)
     !               |
     forall(j=1:N_y+1)
+        !u(0,j) = U_inf
         u(0,j) = U_inf
         v(0,j) = 0.d0
 !         u(N_x+1,j) = 2.d0*u(N_x,j) - u(N_x-1,j)
