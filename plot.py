@@ -213,7 +213,7 @@ class DataMuncher(object):
 if __name__ == "__main__":
     # makeFigures()
     t1 = time.time()
-    x = DataMuncher(uvpFile="_output/UVP.dat", lagFile="_output/lagrangian_points.dat", forceFile="_output/force_grid.dat", xFile="_output/x_Points.dat", yFile="_output/y_Points.dat")
+    x = DataMuncher(uvpFile="_output/UVP.dat", lagFile="_output/lagrangian_points.dat", forceFile="_output/force_grid.dat", xFile="_output/x_points.dat", yFile="_output/y_points.dat")
     # x.plotAll(-1)
     t2 = time.time()
     x.makeColorMaps()
