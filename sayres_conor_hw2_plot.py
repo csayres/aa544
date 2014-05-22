@@ -44,6 +44,8 @@ class DataMuncher(object):
         tVector.append(self.getTimeFromLine(lines[1]))
         for line in lines[2:]:
             # start from line 2 (already grabbed time)
+            if "VARIABLES" in line:
+                continue
             if "ZONE" in line:
                 # new time step encountered, parse the time, start a  gridArray
                 outArray.append(gridArray)
@@ -282,5 +284,5 @@ def makeFigures():
 if __name__ == "__main__":
     # makeFigures()
     x = DataMuncher(udpFile="_output/UVP.dat", residualFile="run2/residual_coarse.dat")
-    x.plotQuiver(-2)
+    x.plotQuiver(0)
 

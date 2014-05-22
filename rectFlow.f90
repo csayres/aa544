@@ -9,32 +9,28 @@
 !  Distributed under the terms of the Berkeley Software Distribution (BSD)
 !  license
 !                     http://www.opensource.org/licenses/
-! ========================================
+ ! ======================================= =
 
 module grid_module
 
     implicit none
 
     ! Grid parameters
-    integer :: N_x,N_y, N_leadIn
-    integer, parameter :: mbc = 1
-    double precision, parameter :: gamma = 0.66d0
-    double precision :: L_x,L_y,dx,dzeta
+    integer :: N_y , N_x, nlx, nly, n_lagrangian_points
+    double precision :: L_x, h, L_y, HL_y, HL_x, H_xOffset, h_l
 
     ! Grid arrays
     ! i-1,j  |  i,j  |  i+1,j           u <-- x_edge, matches p indices
     ! ---v---|---v---|---v---
     !        |       |
     !  i-1,j |  i,j  |  i+1,j
-    !    p   u   p   u   p    <--- x_center, y_center, zeta_center, F_center
+    !    p   u   p   u   p    <--- x_center, y_center
     !        |       |
     ! i-1,j-1| i,j-1 | i+1,j-1
-    ! ---v---|---v---|---v--- <--- y_edge, zeta_edge, F_edge
+    ! ---v---|---v---|---v--- <--- y_edge
     !        |       |
-    double precision, allocatable :: x_edge(:),x_center(:)
-    double precision, allocatable :: zeta_edge(:),zeta_center(:)
-    double precision, allocatable :: y_edge(:),y_center(:)
-    double precision, allocatable :: F_edge(:),F_center(:)
+    double precision, allocatable :: x_edge(:),x_center(:), x_lag(:)
+    double precision, allocatable :: y_edge(:),y_center(:), y_lag(:)
 
 contains
 
@@ -46,40 +42,149 @@ contains
         ! Local
         integer :: i
 
-        ! Grid spacing
-        dx = (L_x - 0.d0) / (N_x)
-        dzeta = (L_y - 0.d0) / (N_y)
+        ! Grid spacing, must be equal in x and y directions
+        ! base off y dimension (Length, n points)
+        !h = (L_x - 0.d0) / (N_x)
+        h = (L_y - 0.d0) / (N_y)
+        N_x = (L_x - 0.d0) / h
 
         ! Grid array allocation
         allocate(x_edge(0:N_x+1),x_center(0:N_x+1))
-        allocate(zeta_edge(0:N_y+1),zeta_center(0:N_y+1))
         allocate(y_edge(0:N_y+1),y_center(0:N_y+1))
-        allocate(F_edge(0:N_y+1),F_center(0:N_y+1))
 
         ! Calculate grid arrays
-        forall (i=1-mbc:N_x+mbc)
-            x_edge(i) = 0.d0 + i * dx
-            x_center(i) = 0.d0 + (i-0.5d0) * dx
+        forall (i=0:N_x+1)
+            x_edge(i) = 0.d0 + i * h
+            x_center(i) = 0.d0 + (i-0.5d0) * h
         end forall
-        forall (i=1-mbc:N_y+mbc)
-            zeta_edge(i) = 0.d0 + i * dzeta
-            zeta_center(i) = 0.d0 + (i-0.5d0) * dzeta
-            F_edge(i) = F(zeta_edge(i))
-            F_center(i) = F(zeta_center(i))
+        forall (i=0:N_y+1)
+            y_edge(i) = 0.d0 + i * h
+            y_center(i) = 0.d0 + (i-0.5d0) * h
         end forall
-        ! Really don't need these in this implementation
-        y_edge = L_y * (1.d0 - tanh(gamma * (L_y - zeta_edge)) / tanh(gamma*L_y))
-        y_center = L_y * (1.d0 - tanh(gamma * (L_y - zeta_center)) / tanh(gamma*L_y))
 
     end subroutine setup_grid
 
-    ! Grid stretching function
-    double precision pure function F(zeta)
+    ! Setup and allocate all lagrangian points
+    subroutine setup_lagrangian_points()
+
         implicit none
-        double precision, intent(in) :: zeta
-        F =  tanh(gamma*L_y) / (gamma*L_y) * cosh(gamma*(L_y - zeta))**2
-        !F = L_y
-    end function F
+
+
+        !locals
+        double precision :: x_front, x_back
+        double precision :: y_top, y_bottom
+        integer :: i, running_i ! number of points in the x and y directions
+
+        !h_l = h/2 ! spacing between lagrangian points
+
+        ! determine number of points in x and y directions
+        !nlx = HL_x / h_l
+        !nly = HL_y / h_l
+
+        ! all lagrangian points
+        allocate(x_lag(1:(n_lagrangian_points)))
+        allocate(y_lag(1:(n_lagrangian_points)))
+
+        x_front = H_xOffset
+        x_back = H_xOffset + HL_x
+        y_top = 0.5 * L_y + 0.5 * HL_y
+        y_bottom = 0.5 * L_y - 0.5 * HL_y
+
+        ! start lagrangian points at top left corner of
+        ! rectangle and move clockwise
+        ! define top left corner
+        x_lag(1) = x_front
+        y_lag(1) = y_top
+        do i=2,nlx
+            x_lag(i) = x_lag(i-1) + h_l
+            y_lag(i) = y_lag(1)
+        enddo
+        do i=nlx+1,nlx+nly
+            x_lag(i) = x_lag(nlx)
+            y_lag(i) = y_lag(i-1) - h_l
+        enddo
+        do i = nlx+nly+1,nlx+nly+nlx
+            x_lag(i) = x_lag(i-1) - h_l
+            y_lag(i) = y_lag(nlx+nly)
+        enddo
+        do i=nlx+nly+nlx+1,nlx+nly+nlx+nly
+            x_lag(i) = x_lag(nlx+nly+nlx)
+            y_lag(i) = y_lag(i-1) + h_l
+        enddo
+
+    end subroutine setup_lagrangian_points
+
+    subroutine output_lagrangian_points()
+
+        ! local
+        integer :: i
+        open(unit=35,file='_output/lagrangian_points.dat',access='sequential',status='unknown')
+        do i=1,nlx*2+nly*2
+            write(35,*) x_lag(i), y_lag(i)
+        enddo
+        close(35)
+
+    end subroutine output_lagrangian_points
+
+    subroutine output_grid_centers()
+
+        ! local
+        integer :: i
+        open(unit=35,file='_output/x_points.dat',access='sequential',status='unknown')
+        do i=1,N_x
+            write(35,*) x_edge(i)
+        enddo
+        close(35)
+        open(unit=35,file='_output/y_points.dat',access='sequential',status='unknown')
+        do i=1,N_y
+            write(35,*) y_edge(i)
+        enddo
+        close(35)
+    end subroutine output_grid_centers
+
+    ! Grid stretching function
+!    double precision pure function F(zeta)
+!        implicit none
+!        double precision, intent(in) :: zeta
+        !F =  tanh(gamma*L_y) / (gamma*L_y) * cosh(gamma*(L_y - zeta))**2
+!        F = L_y
+!    end function F
+
+    !delta_hxy function equation 2.12 of jfm 2010
+    ! computes delta function from a vector, eg (x1,y1) - (x2,y2)
+    double precision pure function delta_hxy(x1,y1,x2,y2)
+        implicit none
+        double precision, intent(in) :: x1, y1, x2, y2
+        delta_hxy = delta_h1(x1,x2) * delta_h1(y1,y2)
+    end function delta_hxy
+
+    ! delta_h1 function
+    double precision pure function delta_h1(n1, n2) ! matches eqn 21 roma-peskin-berger
+        implicit none
+        double precision, intent(in) :: n1, n2
+        ! local
+        double precision :: r
+        r = (n1 - n2) / h
+        delta_h1 = 1 / h * phi_r(r)
+    end function delta_h1
+
+    ! phi_r function
+    double precision pure function phi_r(r) ! matches eqn 22 roma-peskin-berger
+        implicit none
+        double precision, intent(in) :: r
+        ! local
+        double precision :: output, absr
+        absr = abs(r)
+        if (absr<=0.5) then
+            output = 1.d0/3.d0 * (1 + sqrt(1-3*absr**2))
+        else if (absr<=1.5) then
+            output = 1.d0/6.d0 * (5 - 3*absr - sqrt(1-3*(1-absr)**2))
+        else
+            output = 0.d0
+        end if
+        phi_r = output
+
+    end function phi_r
 
     ! Output grid
     subroutine output_grid(frame,t,u,v,p)
@@ -99,6 +204,7 @@ contains
 
         if (t==0) then
         open(unit=70,file='_output/UVP.dat',access='sequential',status='unknown')
+        write(70,*) "Grid Size", N_x, N_y
         write(70,*) ' VARIABLES= "x", "y", "u", "v", "p"'
         write(70,100) t,N_X,N_Y
         endif
@@ -118,12 +224,58 @@ contains
         if (abs(v(i,j)) < 1d-99) v(i,j) = 0.d0
         if (abs(p(i,j)) < 1d-99) p(i,j) = 0.d0
 
-        write(70,"(5e26.16)") x_center(i),y_center(j),u(i,j),v(i,j),p(i,j)
+        write(70,"(5e26.16)") x_edge(i),y_edge(j),u(i,j),v(i,j),p(i,j)
 
         enddo
         enddo
 
     end subroutine output_grid
+
+    ! Output grid
+    subroutine output_force_grid(frame,t,u_star,v_star)
+
+        implicit none
+
+        ! Arguments
+        integer, intent(in) :: frame
+        double precision, intent(in) :: t
+        double precision, dimension(0:N_x+1,0:N_y+1) :: u_star, v_star
+
+        ! Locals
+        integer :: i,j
+
+
+! Open output file and write file header:
+
+        if (t==0) then
+        open(unit=77,file='_output/force_grid.dat',access='sequential',status='unknown')
+        write(77,*) "Grid Size", N_y, N_x
+        write(77,*) ' VARIABLES= "x", "y", "u", "v"'
+        write(77,100) t,N_X,N_Y
+        endif
+
+ 100 FORMAT('ZONE T="t = ',e26.16,'"',' F=POINT, I=',I5,' J=', I5)
+
+        if (t>0) then
+        write(77,100) t,N_X,N_Y
+        endif
+
+        ! Write out data
+        do j=1,N_y
+        do i=1,N_x
+
+        ! Reset to zero if exponent is too large
+        if (abs(u_star(i,j)) < 1d-99) u_star(i,j) = 0.d0
+        if (abs(v_star(i,j)) < 1d-99) v_star(i,j) = 0.d0
+
+        write(77,"(5e26.16)") x_edge(i),y_edge(j),u_star(i,j),v_star(i,j)
+
+        enddo
+        enddo
+
+    end subroutine output_force_grid
+
+
 
 end module grid_module
 
@@ -148,7 +300,7 @@ program main
 
     ! ====================================
     ! Solver parameters
-    integer, parameter :: MAX_ITERATIONS = 4000
+    integer, parameter :: MAX_ITERATIONS = 10000
     double precision, parameter :: TOLERANCE = 1.d-4, CFL = 0.8d0
     logical, parameter :: write_star = .false.
     integer :: n_steps
@@ -166,11 +318,12 @@ program main
     ! ===================================
     ! Locals
     character*20 :: arg
-    integer :: i,j,n,m,frame,i_R,j_R
+    integer :: i,j,n,m,frame,i_R,j_R, k
     double precision :: R,t,dt,a
     double precision, allocatable :: Flux_ux(:,:),Flux_uy(:,:),Flux_vy(:,:)
     double precision :: uu_x,uv_y,uv_x,vv_y,u_xx,u_yy,v_xx,v_yy
-    double precision, allocatable :: Q(:,:),b(:),cp(:),cm(:)
+    double precision, allocatable :: Q(:,:),b(:),cp(:),cm(:), ustar_lagF(:), vstar_lagF(:)
+    double precision :: xGrid, yGrid, xLag, yLag
     ! ===================================
 
     ! Get command line arguments
@@ -204,23 +357,32 @@ program main
 !!  Parameters: !!
 !!!!!!!!!!!!!!!!!!
 
-    N_x=20  !Number of grid points in x-direction
-    N_y=20   !Number of grid points in y-direction
-    N_leadIn = 5 !Number of grid points before wall boundary
-    L_x=10.0 !Length of box in x-direction
-    L_y=4.0  !Length of box in y-direction
-    n_steps=500 !Interval that u,v and p are printed to UVP.dat
-    Re=100.0   !Reynolds number
-
-    print *,"Running blasius with following parameters: "
-    print "(a,i3,a,i3,a)"," (N_x,N_y) = (",N_x,",",N_y,")"
-    print "(a,e16.8,a,e16.8,a)"," (L_x,L_y) = (",L_x,",",L_y,")"
-    print "(a,i4,a)"," Output every ",n_steps," steps"
-    print "(a,e16.8)"," Reynold's number = ",Re
-
-    ! ===================================
+    !N_x=10  !Number of grid points in x-direction
+    N_y = 50   !Number of grid points in y-direction
+    L_x = 100.0 !Length of box in x-direction
+    L_y = 80.0  !Length of box in y-direction
+    n_steps = 100 !Interval that u,v and p are printed to UVP.dat
+    Re = 150.d0   !Reynolds number
     ! Setup grid and arrays
     call setup_grid()
+    call output_grid_centers()
+
+    !!! Lagrangian Points
+    HL_y = 0.1 * L_y  ! Length of rect bluff y-direction
+    HL_x = HL_y ! Length of rect bluff in x-direction
+    H_xOffset = 0.2 * L_x ! how far along x before bluff starts, bluff will always be
+                           ! centered in the domain.
+    h_l = h ! spacing of lagrangian points
+    ! determine number of points in x and y directions
+    nlx = HL_x / h_l
+    nly = HL_y / h_l
+    n_lagrangian_points = 2*nlx + 2*nly
+    call setup_lagrangian_points()
+    call output_lagrangian_points()
+    ! ===================================
+
+
+
     allocate(Flux_ux(1:N_x+1,0:N_y+1))
     allocate(Flux_uy(0:N_x,0:N_y))
     allocate(Flux_vy(0:N_x+1,0:N_y))
@@ -228,24 +390,29 @@ program main
     allocate(b(1:N_y),cp(1:N_y),cm(1:N_y))
 
     ! Calculate matrix coefficients for Poisson solve
-    a = 1.d0 / dx**2
+    a = 1.d0 / h**2
     forall (j=1:N_y)
-        b(j) = - (2.d0 / dx**2 + F_center(j) / dzeta**2 * (F_edge(j) + F_edge(j-1)))
-        cp(j) = (F_center(j) * F_edge(j)) / dzeta**2
-        cm(j) = (F_center(j) * F_edge(j-1)) / dzeta**2
+        b(j) = - (2.d0 / h**2 + y_center(j) / h**2 * (y_edge(j) + y_edge(j-1)))
+        cp(j) = (y_center(j) * y_edge(j)) / h**2
+        cm(j) = (y_center(j) * y_edge(j-1)) / h**2
     end forall
 
     ! Velocity and pressure arrays
-    allocate(u(1-mbc:N_x+mbc,1-mbc:N_y+mbc),u_star(1-mbc:N_x+mbc,1-mbc:N_y+mbc))
-    allocate(v(1-mbc:N_x+mbc,1-mbc:N_y+mbc),v_star(1-mbc:N_x+mbc,1-mbc:N_y+mbc))
-    allocate(p(1-mbc:N_x+mbc,1-mbc:N_y+mbc))
+    allocate(u(0:N_x+1,0:N_y+1),u_star(0:N_x+1,0:N_y+1))
+    allocate(v(0:N_x+1,0:N_y+1),v_star(0:N_x+1,0:N_y+1))
+    allocate(p(0:N_x+1,0:N_y+1))
     allocate(u_old(1:N_x,1:N_y),v_old(1:N_x,1:N_y))
+
+    ! velocity at lagrangian points
+    allocate(ustar_lagF(1:(n_lagrangian_points)))
+    allocate(vstar_lagF(1:(n_lagrangian_points)))
 
     ! Inital conditions
     u = U_inf
     v = 0.d0
     p = 0.d0
-    dt = CFL * dx / (Re * U_inf)
+    !dt = CFL * h / (Re * U_inf) / 5.d0
+    dt = h / 100.d0
     t = 0.d0
     frame = 0
 
@@ -257,7 +424,7 @@ program main
     print "(a,i3,a,i4,a,e16.8)","Writing frame ",frame," during step n=",0," t=",t
 
     ! Open up file to store residual information in
-    open(unit=13, file='residual.dat', status="unknown", action="write")
+    !open(unit=13, file='residual.dat', status="unknown", action="write")
 
     ! ===================================
     ! Main algorithm loop
@@ -300,28 +467,24 @@ program main
         forall (i=0:N_x+1,j=0:N_y) Flux_vy(i,j) = (v(i,j+1) + v(i,j))**2 / 4.d0
         do j=1,N_y
             do i=1,N_x
-!********************************************
-!***  ADD RHS TO THE FOLLOWING FORMULAS:  ***
-!********************************************
                 ! Advective terms, see Lecture 4 notes, page 12
-                ! Grid stretching function defined above F(zeta), F_center
-                uu_x = (Flux_ux(i+1,j) - Flux_ux(i,j)) / dx
-                uv_y = F_center(j) * (Flux_uy(i,j) - Flux_uy(i,j-1)) / dzeta !
+                uu_x = (Flux_ux(i+1,j) - Flux_ux(i,j)) / h
+                uv_y = y_center(j) * (Flux_uy(i,j) - Flux_uy(i,j-1)) / h !
 
-                uv_x = (Flux_uy(i,j) - Flux_uy(i-1,j)) / dx
-                vv_y = F_edge(j) * (Flux_vy(i,j) - Flux_vy(i,j-1)) / dzeta
+                uv_x = (Flux_uy(i,j) - Flux_uy(i-1,j)) / h
+                vv_y = y_edge(j) * (Flux_vy(i,j) - Flux_vy(i,j-1)) / h
 
                 ! Diffusive terms
-                u_xx = (u(i+1,j) - 2*u(i,j) + u(i-1,j)) / (dx**2)
-                u_yy = (F_center(j) / dzeta**2) * (F_edge(j) * (u(i,j+1) - u(i,j)) - F_edge(j-1) * (u(i,j) - u(i,j-1))) !edge leads center by 0.5, verify by looking at poisson solver
-                v_xx = (v(i+1,j) - 2.d0*v(i,j) + v(i-1,j)) / (dx**2)
-                v_yy = (F_edge(j) / dzeta**2) * (F_center(j+1) * (v(i,j+1) - v(i,j)) - F_center(j) * (v(i,j) - v(i,j-1)))
+                u_xx = (u(i+1,j) - 2*u(i,j) + u(i-1,j)) / (h**2)
+                u_yy = (y_center(j) / h**2) * (y_edge(j) * (u(i,j+1) - u(i,j)) - y_edge(j-1) * (u(i,j) - u(i,j-1))) !edge leads center by 0.5, verify by looking at poisson solver
+                v_xx = (v(i+1,j) - 2.d0*v(i,j) + v(i-1,j)) / (h**2)
+                v_yy = (y_edge(j) / h**2) * (y_center(j+1) * (v(i,j+1) - v(i,j)) - y_center(j) * (v(i,j) - v(i,j-1)))
 
                 ! Update to u* and v* values
                 u_star(i,j) = u(i,j) + dt * (-1*(uu_x + uv_y) + nu*(u_xx + u_yy))
                 v_star(i,j) = v(i,j) + dt * (-1*(uv_x+vv_y) + nu*(v_xx + v_yy))
-            end do
-        end do
+            enddo
+        enddo
 
         ! Debug, save out u_star,v_star,p
         if (write_star) then
@@ -329,31 +492,65 @@ program main
             print "(a,i3,a,i4,a,e16.8)","Writing frame ",frame," during step n=",n," t=",t
             call output_grid(frame,t,u_star,v_star,p)
         endif
+    !===================================
+        ! compute u* and v* forcing at lagrangian points
+        do k=1,n_lagrangian_points
+            ! loop over whole domain (could likely just do a subset to speed up later)
+            ! initialize to zero
+            ustar_lagF(k) = 0.d0
+            vstar_lagF(k) = 0.d0
+            do j=1,N_y
+                do i=1,N_x
+                    ! convenience variables
+                    ! WARNING: use edge or centers???!!!!
+                    xGrid = x_edge(i)
+                    yGrid = y_edge(j)
+                    xLag = x_lag(k)
+                    yLag = y_lag(k)
+                    ustar_lagF(k) = ustar_lagF(k) + (-1.d0) * u_star(i,j) * delta_hxy(xGrid,yGrid,xLag,yLag)*h**2/dt
+                    vstar_lagF(k) = vstar_lagF(k) + (-1.d0) * v_star(i,j) * delta_hxy(xGrid,yGrid,xLag,yLag)*h**2/dt
+                enddo
+            enddo
+        enddo
+
+        ! calcluate the force grid (could be combined with the next step, but I wanna look at the force grid)
+        do j=1,N_y
+            do i=1,N_x
+                do k=1,n_lagrangian_points
+                    ! sum up forces acting on this point
+                    xGrid = x_edge(i)
+                    yGrid = y_edge(j)
+                    xLag = x_lag(k)
+                    yLag = y_lag(k)
+                    u_star(i,j) = u_star(i,j) + ustar_lagF(k) * delta_hxy(xGrid,yGrid,xLag,yLag)*h_l**2*dt
+                    v_star(i,j) = v_star(i,j) + vstar_lagF(k) * delta_hxy(xGrid,yGrid,xLag,yLag)*h_l**2*dt
+                enddo
+            enddo
+        enddo
+
+        call output_force_grid(frame,t,u_star,v_star)
 
     ! ===================================
-        ! Step 2: Solve projection poisson problem
+        ! Solve projection poisson problem
         call bc(u_star,v_star,U_inf)
         forall(i=1:N_x,j=1:N_y)
             ! page 16 lecture 4 notes
-            Q(i,j) = 1.d0/dt * ((u_star(i,j)-u_star(i-1,j)) / dx + (v_star(i,j)-v_star(i,j-1)) / dzeta * F_center(j))
+            Q(i,j) = 1.d0/dt * ((u_star(i,j)-u_star(i-1,j)) / h + (v_star(i,j)-v_star(i,j-1)) / h * y_center(j))
         end forall
         ! Solve poisson problem
         call solve_poisson(p,Q,a,b,cm,cp)
 
     ! ===================================
-        ! Step 3: Update velocities to end time
-        !**********************************************
-        !***  ADD RHS TO VELOCITY UPDATE FORLUMAS:  ***
-        !**********************************************
+        ! Update velocities to end time
         ! see work on page 18 lecture 4
         forall (i=1:N_x,j=1:N_y)
             ! appears rho is 1.d0 from Q matrix
-            u(i,j) = u_star(i,j) - dt * (p(i+1,j) - p(i,j)) / dx
-            v(i,j) = v_star(i,j) - dt * (p(i,j+1) - p(i,j)) * F_edge(j) / dzeta
+            u(i,j) = u_star(i,j) - dt * (p(i+1,j) - p(i,j)) / (rho*h)
+            v(i,j) = v_star(i,j) - dt * (p(i,j+1) - p(i,j)) * y_edge(j) / (rho*h)
         end forall
 
     ! ===================================
-        ! Step 4: Check convergence
+        ! Check convergence
         R = 0.d0
         do j=1,N_y
             do i=1,N_x
@@ -366,7 +563,7 @@ program main
         enddo
         ! Finish up loop
         !print "(a,i4,a,i3,a,i3,a,e16.8)","Loop ",n,": (",i_R,",",j_R,") - R = ",R
-        write (13,"(i4,i4,i4,e16.8)") n,i_R,j_R,R
+        !write (13,"(i4,i4,i4,e16.8)") n,i_R,j_R,R
         ! Write out u,v,p every n_steps
         if (mod(n,n_steps) == 0) then
             frame = frame + 1
@@ -388,7 +585,9 @@ program main
     endif
     call output_grid(frame,t,u,v,p) ! ouput last grid?
 !    print "(a,i3,a,i4,a,e16.8)","Tolerance reaced!, Writing frame ",frame," during step n=",n," t=",t
-    close(13)
+    !close(13)
+    close(70)
+    close(77)
 end program main
 
 
@@ -404,8 +603,8 @@ subroutine bc(u,v,U_inf)
 
     ! Input/Output arguments
     double precision, intent(in) :: U_inf
-    double precision, intent(inout) :: u(1-mbc:N_x+mbc,1-mbc:N_y+mbc)
-    double precision, intent(inout) :: v(1-mbc:N_x+mbc,1-mbc:N_y+mbc)
+    double precision, intent(inout) :: u(0:N_x+1,0:N_y+1)
+    double precision, intent(inout) :: v(0:N_x+1,0:N_y+1)
 
     ! Locals
     integer :: i,j
@@ -425,16 +624,11 @@ subroutine bc(u,v,U_inf)
     ! v(i,0) = 0.d0         v(i,N_y+1) = v(i,N_y)
     ! p(i,0) = p(i,1)       p(i,N_y+1) = 0.d0
     forall(i=0:N_x+1)
-        u(i,0) = -u(i,1)
-        v(i,0) = 0.d0
-        u(i,N_y+1) = u(i,N_y)
-        v(i,N_y+1) = v(i,N_y)
-    end forall
-    ! overwrite the lead-in
-    ! boundary to have a slip condition
-    forall(i=0:N_leadIn)
+        ! no slip conditions on top and bottom
         u(i,0) = u(i,1)
         v(i,0) = v(i,1)
+        u(i,N_y+1) = u(i,N_y)
+        v(i,N_y+1) = v(i,N_y)
     end forall
     ! Left Boundaries
     !   x 0,j  |      x 1,j
@@ -471,12 +665,12 @@ subroutine solve_poisson(P,Q,a,b,cm,cp)
     ! Input
     double precision, intent(in) :: Q(1:N_x,1:N_y),a
     double precision, intent(in) :: b(1:N_y),cm(1:N_y),cp(1:N_y)
-    double precision, intent(inout) :: P(1-mbc:N_x+mbc,1-mbc:N_y+mbc)
+    double precision, intent(inout) :: P(0:N_x+1,0:N_y+1)
 
     ! Solver parameters
     logical, parameter :: verbose = .false.
     integer, parameter :: MAX_ITERATIONS = 10000
-    double precision, parameter :: TOLERANCE = 10.d-4
+    double precision, parameter :: TOLERANCE = 10.d-8
     double precision, parameter :: w = 1.6d0 ! 1 (GS) < w < 2
 
     ! Local variables
@@ -488,16 +682,15 @@ subroutine solve_poisson(P,Q,a,b,cm,cp)
         ! Boundary conditions
         forall (j=0:N_y+1)
             P(0,j) = P(1,j)        ! Left
-            P(N_x+1,j) = P(N_x,j)  ! Right
+            P(N_x+1,j) = P(N_x,j)  ! Right previous
+            !P(N_x+1,j) = 0
         end forall
         forall (i=0:N_x+1)
-            P(i,0) = P(i,1)        ! Bottom wall
-            P(i,N_y+1) = 0.d0      ! Free stream
+            P(i,0) = P(i,1)       ! Free stream
+            P(i,N_y+1) = 0.d0    ! Free stream
+            !P(i,N_y+1) = P(i,N_y)
         end forall
-        ! add in the lead-in bit
-        forall (i=0:N_leadIn)
-            P(i,0) = 0.d0 !Bottom wall acts like free stream
-        end forall
+
         do j=1,N_y
             do i=1,N_x
                 ! Update p
@@ -525,14 +718,14 @@ subroutine solve_poisson(P,Q,a,b,cm,cp)
         print *,"iteration: ", n
         stop
     else
-        print "(a,i6,a,e16.8)", "Solver converged in ",n," steps: R = ",R
+        !print "(a,i6,a,e16.8)", "Solver converged in ",n," steps: R = ",R
         ! Boundary conditions
         forall (j=0:N_y+1)
             P(0,j) = P(1,j)        ! Left
             P(N_x+1,j) = P(N_x,j)  ! Right
         end forall
         forall (i=0:N_x+1)
-            P(i,0) = P(i,1)        ! Bottom wall
+            P(i,0) = 0.d0        ! Free stream
             P(i,N_y+1) = 0.d0      ! Free stream
         end forall
     endif
