@@ -319,7 +319,7 @@ program main
     ! Locals
     character*20 :: arg
     integer :: i,j,n,m,frame,i_R,j_R, k
-    double precision :: R,t,dt,a
+    double precision :: R,t,dt,a, lagFuSum, lagFvSum
     double precision, allocatable :: Flux_ux(:,:),Flux_uy(:,:),Flux_vy(:,:)
     double precision :: uu_x,uv_y,uv_x,vv_y,u_xx,u_yy,v_xx,v_yy
     double precision, allocatable :: Q(:,:),b(:),cp(:),cm(:), ustar_lagF(:), vstar_lagF(:)
@@ -358,11 +358,11 @@ program main
 !!!!!!!!!!!!!!!!!!
 
     !N_x=10  !Number of grid points in x-direction
-    N_y = 50   !Number of grid points in y-direction
-    L_x = 100.0 !Length of box in x-direction
+    N_y = 40   !Number of grid points in y-direction
+    L_x = 200.0 !Length of box in x-direction
     L_y = 80.0  !Length of box in y-direction
     n_steps = 100 !Interval that u,v and p are printed to UVP.dat
-    Re = 150.d0   !Reynolds number
+    Re = 50.d0   !Reynolds number
     ! Setup grid and arrays
     call setup_grid()
     call output_grid_centers()
@@ -408,12 +408,19 @@ program main
     allocate(vstar_lagF(1:(n_lagrangian_points)))
 
     ! Inital conditions
-    !u = U_inf
-    u = 0.d0
+    u = U_inf
+    !u = 0.d0
+    !! create ramping u at inflow for starting condition, should be zero at boundary
+    !do j=1,N_y
+    !do i=1,L_x/h
+    !    R = h * (i-1)
+    !    u(i,j) = U_inf - (R/L_x)*U_inf
+    !enddo
+    !enddo
     v = 0.d0
     p = 0.d0
-    !dt = CFL * h / (Re * U_inf) / 5.d0
-    dt = h / 200.d0
+    dt = CFL * h / (Re * U_inf) / 5.d0
+    !dt = h / 50.d0
     t = 0.d0
     frame = 0
 
@@ -626,11 +633,21 @@ subroutine bc(u,v,U_inf)
     ! v(i,0) = 0.d0         v(i,N_y+1) = v(i,N_y)
     ! p(i,0) = p(i,1)       p(i,N_y+1) = 0.d0
     forall(i=0:N_x+1)
-        ! no slip conditions on top and bottom
+        ! TA's ?
+        !u(i,0) = u(i,1)
+        !v(i,0) = v(i,1)
+        !u(i,N_y+1) = u(i,N_y)
+        !v(i,N_y+1) = v(i,N_y)
+
+        ! given
+        !u(i,0) = u(i,1)
+        !v(i,0) = v(i,1)
+
         u(i,0) = u(i,1)
         v(i,0) = v(i,1)
         u(i,N_y+1) = u(i,N_y)
         v(i,N_y+1) = v(i,N_y)
+
     end forall
     ! Left Boundaries
     !   x 0,j  |      x 1,j
@@ -643,13 +660,20 @@ subroutine bc(u,v,U_inf)
     !     + N_x,j   o N_x,j   + N_x+1,j  o N_x+1,j  p(N_x+1,j) = p(N_x,j)
     !               |
     forall(j=1:N_y+1)
+        ! TAs
         !u(0,j) = U_inf
+        !v(0,j) = 0.d0
+        !u(N_x+1,j) = u(N_x,j)
+        !v(N_x+1,j) = v(N_x,j)
+
+        ! given
         u(0,j) = U_inf
         v(0,j) = 0.d0
-!         u(N_x+1,j) = 2.d0*u(N_x,j) - u(N_x-1,j)
+
+        !u(N_x+1,j) = 2.d0*u(N_x,j) - u(N_x-1,j)
         u(N_x+1,j) = u(N_x,j)
         v(N_x+1,j) = v(N_x,j)
-!         v(N_x+1,j) = 2.d0*v(N_x,j) - v(N_x-1,j)
+        !v(N_x+1,j) = 2.d0*v(N_x,j) - v(N_x-1,j)
     end forall
 
 end subroutine bc
@@ -683,15 +707,26 @@ subroutine solve_poisson(P,Q,a,b,cm,cp)
     do n=1,MAX_ITERATIONS
         R = 0.d0
         ! Boundary conditions
-        forall (j=0:N_y+1)
+        forall (j=0:N_y+1) ! left and righ
+            ! TAs
+            !P(0,j) = P(1,j)
+            P(N_x+1,j) = 0
+
+            ! given
             P(0,j) = P(1,j)        ! Left
-            P(N_x+1,j) = P(N_x,j)  ! Right previous
-            !P(N_x+1,j) = 0
+            !P(N_x+1,j) = P(N_x,j)  ! Right
+
         end forall
-        forall (i=0:N_x+1)
-            P(i,0) = P(i,1)       ! Free stream
-            P(i,N_y+1) = 0.d0    ! Free stream
+        forall (i=0:N_x+1) ! top and bottom
+            !TAs
+            !P(i,0) = P(i,1)
             !P(i,N_y+1) = P(i,N_y)
+
+            ! given
+            !P(i,0) = P(i,1)        ! Bottom wall
+            P(i,0) = 0.d0          ! Free stream
+            P(i,N_y+1) = 0.d0      ! Free stream
+
         end forall
 
         do j=1,N_y
@@ -723,14 +758,14 @@ subroutine solve_poisson(P,Q,a,b,cm,cp)
     else
         !print "(a,i6,a,e16.8)", "Solver converged in ",n," steps: R = ",R
         ! Boundary conditions
-        forall (j=0:N_y+1)
-            P(0,j) = P(1,j)        ! Left
-            P(N_x+1,j) = P(N_x,j)  ! Right
-        end forall
-        forall (i=0:N_x+1)
-            P(i,0) = 0.d0        ! Free stream
-            P(i,N_y+1) = 0.d0      ! Free stream
-        end forall
+    !    forall (j=0:N_y+1)
+    !        P(0,j) = P(1,j)        ! Left
+    !        P(N_x+1,j) = P(N_x,j)  ! Right
+    !    end forall
+    !    forall (i=0:N_x+1)
+    !        P(i,0) = 0.d0        ! Free stream
+    !        P(i,N_y+1) = 0.d0      ! Free stream
+    !    end forall
     endif
 
 end subroutine solve_poisson
