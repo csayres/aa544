@@ -358,17 +358,17 @@ program main
 !!!!!!!!!!!!!!!!!!
 
     !N_x=10  !Number of grid points in x-direction
-    N_y = 40   !Number of grid points in y-direction
-    L_x = 200.0 !Length of box in x-direction
-    L_y = 80.0  !Length of box in y-direction
-    n_steps = 100 !Interval that u,v and p are printed to UVP.dat
+    N_y = 64   !Number of grid points in y-direction
+    L_x = 30 !Length of box in x-direction
+    L_y = 30  !Length of box in y-direction
+    n_steps = MAX_ITERATIONS/10 !Interval that u,v and p are printed to UVP.dat
     Re = 50.d0   !Reynolds number
     ! Setup grid and arrays
     call setup_grid()
     call output_grid_centers()
 
     !!! Lagrangian Points
-    HL_y = 0.1 * L_y  ! Length of rect bluff y-direction
+    HL_y = 0.05 * L_y  ! Length of rect bluff y-direction
     HL_x = HL_y ! Length of rect bluff in x-direction
     H_xOffset = 0.2 * L_x ! how far along x before bluff starts, bluff will always be
                            ! centered in the domain.
@@ -659,7 +659,7 @@ subroutine bc(u,v,U_inf)
     !               |                               v(N_x+1,j) = 2 v(N_x,j) - v(N_x-1,j)
     !     + N_x,j   o N_x,j   + N_x+1,j  o N_x+1,j  p(N_x+1,j) = p(N_x,j)
     !               |
-    forall(j=1:N_y+1)
+    forall(j=0:N_y+1)
         ! TAs
         !u(0,j) = U_inf
         !v(0,j) = 0.d0
@@ -670,10 +670,10 @@ subroutine bc(u,v,U_inf)
         u(0,j) = U_inf
         v(0,j) = 0.d0
 
-        !u(N_x+1,j) = 2.d0*u(N_x,j) - u(N_x-1,j)
-        u(N_x+1,j) = u(N_x,j)
-        v(N_x+1,j) = v(N_x,j)
-        !v(N_x+1,j) = 2.d0*v(N_x,j) - v(N_x-1,j)
+        u(N_x+1,j) = 2.d0*u(N_x,j) - u(N_x-1,j)
+        !u(N_x+1,j) = u(N_x,j)
+        !v(N_x+1,j) = v(N_x,j)
+        v(N_x+1,j) = 2.d0*v(N_x,j) - v(N_x-1,j)
     end forall
 
 end subroutine bc
@@ -710,12 +710,14 @@ subroutine solve_poisson(P,Q,a,b,cm,cp)
         forall (j=0:N_y+1) ! left and righ
             ! TAs
             !P(0,j) = P(1,j)
-            P(N_x+1,j) = 0
+            !P(N_x+1,j) = 0
 
             ! given
             P(0,j) = P(1,j)        ! Left
             !P(N_x+1,j) = P(N_x,j)  ! Right
 
+            ! iman!
+            P(N_x+1,j) = P(N_x, j)
         end forall
         forall (i=0:N_x+1) ! top and bottom
             !TAs
