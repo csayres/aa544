@@ -18,7 +18,7 @@ module grid_module
     ! Grid parameters
     integer :: N_y , N_x, nlx, nly, n_lagrangian_points
     double precision :: L_x, h, L_y, HL_y, HL_x, H_xOffset, h_l
-    character*5 :: fileSuffix
+    character*20 :: fileSuffix
 
     ! Grid arrays
     ! i-1,j  |  i,j  |  i+1,j           u <-- x_edge, matches p indices
@@ -301,8 +301,8 @@ program main
 
     ! ====================================
     ! Solver parameters
-    integer, parameter :: MAX_ITERATIONS = 100000
-    double precision, parameter :: TOLERANCE = 1d-4, CFL = 0.8d0
+    integer, parameter :: MAX_ITERATIONS = 40000
+    double precision, parameter :: TOLERANCE = 1d-4, CFL = 1.d0
     logical, parameter :: write_star = .false.
     integer :: n_steps
 
@@ -328,10 +328,11 @@ program main
     ! ===================================
 
     ! Get command line arguments
-    if (iargc() /= 2) then
+    if (iargc() /= 3) then
         print *,"Wrong number of command line arguments, expected 2."
         print *,"    Lx - Length of domain in x"
         print *,"    boxLen - Length of box"
+        print *," Re = reynolds number"
         print *, "got ", iargc()
         stop
     else
@@ -339,9 +340,12 @@ program main
         read (arg,'(I10)') N_y
         call getarg(2,arg)
         read (arg,'(I10)') boxLen
+        call getarg(3,arg)
+        read (arg,'(F7.0)') Re
     endif
-    write(fileSuffix, "(I3,'_',I1)") N_y, boxLen
+    write(fileSuffix, "(I3,'_',I1,'_',F7.0)") N_y, boxLen, Re
     print *, fileSuffix
+    print *, Re
 
 !!!!!!!!!!!!!!!!!!
 !!  Parameters: !!
@@ -349,9 +353,16 @@ program main
 
     !N_x=10  !Number of grid points in x-direction
     !N_y = 128   !Number of grid points in y-direction
-    L_x = 30 !Length of box in x-direction
-    L_y = 30  !Length of box in y-direction
-    n_steps = MAX_ITERATIONS/50 !Interval that u,v and p are printed to UVP.dat
+    L_x = 40 !Length of box in x-direction
+    L_y = 10  !Length of box in y-direction
+
+
+
+    n_steps = MAX_ITERATIONS/25 !Interval that u,v and p are printed to UVP.dat
+
+
+
+
     ! Setup grid and arrays
     call setup_grid()
     call output_grid_centers()
@@ -361,7 +372,7 @@ program main
     HL_x = boxLen*HL_y ! Length of rect bluff in x-direction
     H_xOffset = 0.25 * L_x ! how far along x before bluff starts, bluff will always be
                            ! centered in the domain.
-    h_l = 0.5*h ! spacing of lagrangian points
+    h_l = h ! spacing of lagrangian points
     ! determine number of points in x and y directions
     nlx = HL_x / h_l
     nly = HL_y / h_l
@@ -407,14 +418,10 @@ program main
     v = 0.d0
     p = 0.d0
 
-    nu = 1.d-3 !1.d0/Re
-    Re = 1.d0/nu
-    !Re = 1000.d0
-    !nu = 1.d0/Re
+    !Re = 100.0
+    nu = 1.d0/Re
     rho = 1.d0
-    dt =  h / (Re * U_inf) !* CFL
-    !dt = h / (Re * U_inf)
-    !dt = h / 1000.
+    dt =  CFL * h / 500.d0
     t = 0.d0
     frame = 0
 
@@ -476,14 +483,14 @@ program main
                 vv_y = y_edge(j) * (Flux_vy(i,j) - Flux_vy(i,j-1)) / h
 
                 ! Diffusive terms
-                u_xx = (u(i+1,j) - 2*u(i,j) + u(i-1,j)) / (h**2)
+                u_xx = (u(i+1,j) - 2.d0*u(i,j) + u(i-1,j)) / (h**2)
                 u_yy = (y_center(j) / h**2) * (y_edge(j) * (u(i,j+1) - u(i,j)) - y_edge(j-1) * (u(i,j) - u(i,j-1))) !edge leads center by 0.5, verify by looking at poisson solver
                 v_xx = (v(i+1,j) - 2.d0*v(i,j) + v(i-1,j)) / (h**2)
                 v_yy = (y_edge(j) / h**2) * (y_center(j+1) * (v(i,j+1) - v(i,j)) - y_center(j) * (v(i,j) - v(i,j-1)))
 
                 ! Update to u* and v* values
-                u_star(i,j) = u(i,j) + dt * (-1.d0*(uu_x + uv_y) + nu*(u_xx + u_yy))
-                v_star(i,j) = v(i,j) + dt * (-1.d0*(uv_x+vv_y) + nu*(v_xx + v_yy))
+                u_star(i,j) = u(i,j) + dt * (-(uu_x + uv_y) + nu*(u_xx + u_yy))
+                v_star(i,j) = v(i,j) + dt * (-(uv_x+vv_y) + nu*(v_xx + v_yy))
             enddo
         enddo
 
@@ -565,21 +572,22 @@ program main
 
         ! Finish up loop
         !print "(a,i4,a,i3,a,i3,a,e16.8)","Loop ",n,": (",i_R,",",j_R,") - R = ",R
-        write (13,"(i5,i4,i4,e16.8)") n,i_R,j_R,R
+
         ! Write out u,v,p every n_steps
         if (mod(n,n_steps) == 0) then
             frame = frame + 1
             call output_grid(frame,t,u,v,p)
             print *, "R = ", R
+            write (13,"(i5,i4,i4,e16.8)") n,i_R,j_R,R
             print "(a,i3,a,i4,a,e16.8)","Writing frame ",frame," during step n=",n," t=",t
         endif
         ! Check tolerance
-        if (R < TOLERANCE) then
-            print *, "Convergence reached, R = ",R
-            call output_grid(frame,t,u,v,p)
-            print "(a,i3,a,i4,a,e16.8)","Writing frame ",frame," during step n=",n," t=",t
-            exit
-        endif
+        !if (R < TOLERANCE) then
+            !print *, "Convergence reached, R = ",R
+            !call output_grid(frame,t,u,v,p)
+            !print "(a,i3,a,i4,a,e16.8)","Writing frame ",frame," during step n=",n," t=",t
+            !exit
+        !endif
         ! We did not reach our tolerance, iterate again
         t = t + dt
     enddo
@@ -592,6 +600,7 @@ program main
     close(13)
     close(70)
     !close(77)
+    call output_grid(frame,t,u,v,p)
     print *, "!!!!!!!!!!!!!!!!!!!1END!!!!!!!!!!!!!!!", fileSuffix
 end program main
 
@@ -639,10 +648,12 @@ subroutine bc(u,v,U_inf)
         !u(i,0) = u(i,1)
         !v(i,0) = v(i,1)
 
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         u(i,0) = u(i,1)
         v(i,0) = v(i,1)
         u(i,N_y+1) = u(i,N_y)
         v(i,N_y+1) = v(i,N_y)
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     end forall
     ! Left Boundaries
@@ -724,6 +735,7 @@ subroutine solve_poisson(P,Q,a,b,cm,cp)
             !P(i,0) = P(i,1)        ! Bottom wall
             P(i,0) = 0.d0          ! Free stream
             P(i,N_y+1) = 0.d0      ! Free stream
+
 
         end forall
 

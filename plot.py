@@ -11,7 +11,7 @@ import matplotlib.mlab as ml
 # rc('font', family='serif')
 
 class DataMuncher(object):
-    def __init__(self, uvpFile, lagFile, forceFile, xFile, yFile, residFile):
+    def __init__(self, uvpFile, lagFile, xFile, yFile, residFile):
         """Object for interacting with fortran code output, various plotting methods, etc.
 
         @param[in] uvpFile: string, path to [uvpFile].dat, output from fortran routine
@@ -19,14 +19,14 @@ class DataMuncher(object):
         @param[in] forceFile: string, path to [uvpFile].dat, output from fortran routine
         """
         self.uvpFile2Mat(uvpFile)
-        # self.forceMat, foo, foo = self.uvpFile2Mat(forceFile)
         self.lagPoints = self.lagFile2Mat(lagFile)
         self.xPts = numpy.loadtxt(xFile)
         self.yPts = numpy.loadtxt(yFile)
         self.residMat = self.resid2Mat(residFile)
         assert len(self.xPts)==self.gridsize[0]
         assert len(self.yPts)==self.gridsize[1]
-        boxLength = uvpFile.split("_")[-1].split(".")[0]
+        #boxLength = uvpFile.split("_")[-1].split(".")[0]
+        boxLength = int(numpy.max(self.lagPoints[:,1]) - numpy.min(self.lagPoints[:,1]) / (numpy.max(self.lagPoints[:,0]) - numpy.min(self.lagPoints[:,0])) )
         self.figSuffix = "grid (%ix%i) box length (%s)" % (self.gridsize[0], self.gridsize[1], boxLength)
 
     def getTimeFromLine(self, line):
@@ -164,7 +164,7 @@ class DataMuncher(object):
         Z = self.reshapeZ(z)
         return X,Y,Z
 
-    def makeColorMaps(self, fast=False, tVector=None):
+    def makeColorMaps(self, fast=True, tVector=None):
         if not tVector:
             tVector = self.tVector
         for i in range(len(tVector)):
@@ -203,7 +203,7 @@ class DataMuncher(object):
         if fast:
             z = self.getUVorP(u_v_or_p, timeStep)
             Z = self.reshapeZ(z)
-            plt.imshow(Z.T, cmap=cmap)
+            plt.imshow(Z.T, vmin=0.5, vmax=1.5)
         else:
             X,Y,Z = self.getGridData(timeStep, u_v_or_p)
             # Z = scipy.interpolate.griddata(x,y,z,(xi,yi))
@@ -274,8 +274,15 @@ class elJefe(object):
 
 if __name__ == "__main__":
     # makeFigures()
-    x = createDataMuncher(256, 5)
+    #x = createDataMuncher(256, 5)
+    x = DataMuncher(
+        uvpFile="_output/UVP.dat",
+        lagFile="_output/lagrangian_points.dat",
+        xFile="_output/x_points.dat",
+        yFile="_output/y_points.dat",
+        residFile="_output/residual.dat",
+        )
     # x.plotAll(-1)
-    #x.makeColorMaps()
+    x.makeColorMaps()
     x.plotResidSemiLog("resid")
 
