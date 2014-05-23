@@ -358,7 +358,7 @@ program main
 !!!!!!!!!!!!!!!!!!
 
     !N_x=10  !Number of grid points in x-direction
-    N_y = 62   !Number of grid points in y-direction
+    N_y = 128   !Number of grid points in y-direction
     L_x = 30 !Length of box in x-direction
     L_y = 30  !Length of box in y-direction
     n_steps = MAX_ITERATIONS/50 !Interval that u,v and p are printed to UVP.dat
@@ -368,7 +368,7 @@ program main
 
     !!! Lagrangian Points
     HL_y = 0.1 * L_y  ! Length of rect bluff y-direction
-    HL_x = HL_y ! Length of rect bluff in x-direction
+    HL_x = 5*HL_y ! Length of rect bluff in x-direction
     H_xOffset = 0.25 * L_x ! how far along x before bluff starts, bluff will always be
                            ! centered in the domain.
     h_l = 0.5*h ! spacing of lagrangian points
