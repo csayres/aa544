@@ -18,6 +18,7 @@ module grid_module
     ! Grid parameters
     integer :: N_y , N_x, nlx, nly, n_lagrangian_points
     double precision :: L_x, h, L_y, HL_y, HL_x, H_xOffset, h_l
+    character*5 :: fileSuffix
 
     ! Grid arrays
     ! i-1,j  |  i,j  |  i+1,j           u <-- x_edge, matches p indices
@@ -118,7 +119,7 @@ contains
 
         ! local
         integer :: i
-        open(unit=35,file='_output/lagrangian_points.dat',access='sequential',status='unknown')
+        open(unit=35,file='_output/lagrangian_points'//fileSuffix//'.dat',access='sequential',status='unknown')
         do i=1,nlx*2+nly*2
             write(35,*) x_lag(i), y_lag(i)
         enddo
@@ -130,12 +131,12 @@ contains
 
         ! local
         integer :: i
-        open(unit=35,file='_output/x_points.dat',access='sequential',status='unknown')
+        open(unit=35,file='_output/x_points'//fileSuffix//'.dat',access='sequential',status='unknown')
         do i=1,N_x
             write(35,*) x_edge(i)
         enddo
         close(35)
-        open(unit=35,file='_output/y_points.dat',access='sequential',status='unknown')
+        open(unit=35,file='_output/y_points'//fileSuffix//'.dat',access='sequential',status='unknown')
         do i=1,N_y
             write(35,*) y_edge(i)
         enddo
@@ -203,7 +204,7 @@ contains
 ! Open output file and write file header:
 
         if (t==0) then
-        open(unit=70,file='_output/UVP.dat',access='sequential',status='unknown')
+        open(unit=70,file='_output/UVP_'//fileSuffix//'.dat',access='sequential',status='unknown')
         write(70,*) "Grid Size", N_x, N_y
         write(70,*) ' VARIABLES= "x", "y", "u", "v", "p"'
         write(70,100) t,N_X,N_Y
@@ -300,8 +301,8 @@ program main
 
     ! ====================================
     ! Solver parameters
-    integer, parameter :: MAX_ITERATIONS = 10000
-    double precision, parameter :: TOLERANCE = 0.5d-5, CFL = 0.8d0
+    integer, parameter :: MAX_ITERATIONS = 100000
+    double precision, parameter :: TOLERANCE = 1d-4, CFL = 0.8d0
     logical, parameter :: write_star = .false.
     integer :: n_steps
 
@@ -318,7 +319,7 @@ program main
     ! ===================================
     ! Locals
     character*20 :: arg
-    integer :: i,j,n,m,frame,i_R,j_R, k
+    integer :: i,j,n,m,frame,i_R,j_R, k, boxLen
     double precision :: R,t,dt,a, lagFuSum, lagFvSum
     double precision, allocatable :: Flux_ux(:,:),Flux_uy(:,:),Flux_vy(:,:)
     double precision :: uu_x,uv_y,uv_x,vv_y,u_xx,u_yy,v_xx,v_yy
@@ -327,38 +328,27 @@ program main
     ! ===================================
 
     ! Get command line arguments
-!    if (iargc() /= 6) then
-!        print *,"Wrong number of command line arguments, expected 6."
-!        print *,"  blasius Nx Ny Lx Ly Nsteps Re"
-!        print *,"    Nx - Number of grid points in x"
-!        print *,"    Ny - Number of grid points in y"
-!        print *,"    Lx - Length of domain in x"
-!        print *,"    Ly - Length of domain in y"
-!        print *,"    Nsteps - Number of steps in between output"
-!        print *,"    Re - Reynolds number of flow"
-!        stop
-!    else
-!        call getarg(1,arg)
-!        read (arg,'(I10)') N_x
-!        call getarg(2,arg)
-!        read (arg,'(I10)') N_y
-!        call getarg(3,arg)
-!        read (arg,'(e16.8)') L_x
-!        call getarg(4,arg)
-!        read (arg,'(e16.8)') L_y
-!        call getarg(5,arg)
-!        read (arg,'(I10)') n_steps
-!        call getarg(6,arg)
-!        read (arg,'(e16.8)') Re
-!    endif
-
+    if (iargc() /= 2) then
+        print *,"Wrong number of command line arguments, expected 2."
+        print *,"    Lx - Length of domain in x"
+        print *,"    boxLen - Length of box"
+        print *, "got ", iargc()
+        stop
+    else
+        call getarg(1,arg)
+        read (arg,'(I10)') N_y
+        call getarg(2,arg)
+        read (arg,'(I10)') boxLen
+    endif
+    write(fileSuffix, "(I3,'_',I1)") N_y, boxLen
+    print *, fileSuffix
 
 !!!!!!!!!!!!!!!!!!
 !!  Parameters: !!
 !!!!!!!!!!!!!!!!!!
 
     !N_x=10  !Number of grid points in x-direction
-    N_y = 128   !Number of grid points in y-direction
+    !N_y = 128   !Number of grid points in y-direction
     L_x = 30 !Length of box in x-direction
     L_y = 30  !Length of box in y-direction
     n_steps = MAX_ITERATIONS/50 !Interval that u,v and p are printed to UVP.dat
@@ -368,7 +358,7 @@ program main
 
     !!! Lagrangian Points
     HL_y = 0.1 * L_y  ! Length of rect bluff y-direction
-    HL_x = 5*HL_y ! Length of rect bluff in x-direction
+    HL_x = boxLen*HL_y ! Length of rect bluff in x-direction
     H_xOffset = 0.25 * L_x ! how far along x before bluff starts, bluff will always be
                            ! centered in the domain.
     h_l = 0.5*h ! spacing of lagrangian points
@@ -435,7 +425,7 @@ program main
     print "(a,i3,a,i4,a,e16.8)","Writing frame ",frame," during step n=",0," t=",t
 
     ! Open up file to store residual information in
-    open(unit=13, file='_output/residual.dat', status="unknown", action="write")
+    open(unit=13, file='_output/residual_'//fileSuffix//'.dat', status="unknown", action="write")
 
     ! ===================================
     ! Main algorithm loop
