@@ -106,7 +106,11 @@ class DataMuncher(object):
         self.x = xArray
         self.y = yArray
 
-    def getGridData(self, timeStep, u_v_or_p):
+    def reshapeZ(self, Z):
+        Z = numpy.reshape(z, (self.gridsize[0],self.gridsize[1]), order="F")
+        return Z
+
+    def getUVorP(self, u_v_or_p):
         assert u_v_or_p in ["u", "v", "p"]
         # fig = plt.figure()
         if u_v_or_p == "u":
@@ -115,18 +119,25 @@ class DataMuncher(object):
             z = self.v[timeStep]
         else:
             z = self.p[timeStep]
+        return z
+
+    def getGridData(self, timeStep, u_v_or_p):
+        z = getUVorP(u_v_or_p)
         X,Y = numpy.meshgrid(self.xPts,self.yPts)
-        Z = numpy.reshape(z, (self.gridsize[0],self.gridsize[1]), order="F")
+        Z = self.reshapeZ(z)
         return X,Y,Z
 
-    def makeColorMaps(self):
-        for i,t in enumerate(self.tVector):
-            # self.plotColorMap(i, "v", figName="v timestep :%.2f"%t, figTitle="timestep :%.2f"%t)
-            self.plotColorMap(i, "u", figName="u timestep :%.2f"%t, figTitle="timestep :%.2f"%t)
+    def makeColorMaps(self, fast=True, tVector=None):
+        if not tVector:
+            tVector = self.tVector
+        for i,t in enumerate(tVector):
+            self.plotColorMap(i, "v", figName="v timestep :%.2f"%t, figTitle="timestep :%.2f"%t, fast=fast)
+            self.plotColorMap(i, "u", figName="u timestep :%.2f"%t, figTitle="timestep :%.2f"%t, fast=fast)
+            self.plotColorMap(i, "p", figName="p timestep :%.2f"%t, figTitle="timestep :%.2f"%t, fast=fast)
             # self.plotQuiver(i, figName="quiver timestep :%.2f"%t)
             # self.plotQuiverForce(i, figName="quiver Force timestep :%.2f"%t)
 
-    def plotColorMap(self, timeStep, u_v_or_p, figName=None, figTitle="pressure"):
+    def plotColorMap(self, timeStep, u_v_or_p, figName=None, figTitle="pressure", fast=True):
         """Plot a 2D color contour
 
         @param[in] int, timeStep to use (-1 is last time step)
@@ -151,17 +162,22 @@ class DataMuncher(object):
         # X, Y = numpy.meshgrid(xi, yi)
         # X, Y = numpy.meshgrid(x,y)
         # Z = ml.griddata(x, y, z, xi, yi)
-        X,Y,Z = self.getGridData(timeStep, u_v_or_p)
-        # Z = scipy.interpolate.griddata(x,y,z,(xi,yi))
+        if fast:
+            z = getUVorP(u_v_or_p)
+            Z = self.reshapeZ(z)
+            plt.imshow(Z)
+        else:
+            X,Y,Z = self.getGridData(timeStep, u_v_or_p)
+            # Z = scipy.interpolate.griddata(x,y,z,(xi,yi))
 
-        # X, Y = numpy.meshgrid(x, y)
-        # z = numpy.sin(X)
-        # note
-        # plt.contourf(X, Y, Z, cmap=cmap, vmin=-0.5, vmax=1.5)#, norm=norm)
-        # plt.imshow(Z.T, cmap=cmap, vmin=-.5, vmax=1.5)
-        plt.pcolormesh(X, Y, Z.T, vmin=-0.5, vmax=1.5)#, cmap=cmap)#, norm=norm)
-        # img = plot.imshow()
-        self.plotLagPoints()
+            # X, Y = numpy.meshgrid(x, y)
+            # z = numpy.sin(X)
+            # note
+            # plt.contourf(X, Y, Z, cmap=cmap, vmin=-0.5, vmax=1.5)#, norm=norm)
+            # plt.imshow(Z.T, cmap=cmap, vmin=-.5, vmax=1.5)
+            plt.pcolormesh(X, Y, Z.T, vmin=-0.5, vmax=1.5)#, cmap=cmap)#, norm=norm)
+            # img = plot.imshow()
+            self.plotLagPoints()
 
         plt.colorbar()
         plt.title(figTitle)
