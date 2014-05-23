@@ -121,7 +121,7 @@ class DataMuncher(object):
 
     def makeColorMaps(self):
         for i,t in enumerate(self.tVector):
-            self.plotColorMap(i, "v", figName="v timestep :%.2f"%t, figTitle="timestep :%.2f"%t)
+            # self.plotColorMap(i, "v", figName="v timestep :%.2f"%t, figTitle="timestep :%.2f"%t)
             self.plotColorMap(i, "u", figName="u timestep :%.2f"%t, figTitle="timestep :%.2f"%t)
             # self.plotQuiver(i, figName="quiver timestep :%.2f"%t)
             # self.plotQuiverForce(i, figName="quiver Force timestep :%.2f"%t)

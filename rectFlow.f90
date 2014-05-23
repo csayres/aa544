@@ -361,7 +361,7 @@ program main
     N_y = 64   !Number of grid points in y-direction
     L_x = 30 !Length of box in x-direction
     L_y = 30  !Length of box in y-direction
-    n_steps = MAX_ITERATIONS/10 !Interval that u,v and p are printed to UVP.dat
+    n_steps = MAX_ITERATIONS/100 !Interval that u,v and p are printed to UVP.dat
     Re = 50.d0   !Reynolds number
     ! Setup grid and arrays
     call setup_grid()
@@ -408,15 +408,14 @@ program main
     allocate(vstar_lagF(1:(n_lagrangian_points)))
 
     ! Inital conditions
-    u = U_inf
-    !u = 0.d0
+    !u = U_inf
+    u = 0.d0
     !! create ramping u at inflow for starting condition, should be zero at boundary
-    !do j=1,N_y
-    !do i=1,L_x/h
-    !    R = h * (i-1)
-    !    u(i,j) = U_inf - (R/L_x)*U_inf
-    !enddo
-    !enddo
+    do j=0,N_y+1
+    do i=0,H_xOffset/h
+        u(i,j) = U_inf - (h*i/H_xOffset)*U_inf
+    enddo
+    enddo
     v = 0.d0
     p = 0.d0
     dt = CFL * h / (Re * U_inf) / 5.d0
@@ -522,19 +521,19 @@ program main
         enddo
 
         ! calcluate the force grid (could be combined with the next step, but I wanna look at the force grid)
-        do j=1,N_y
-            do i=1,N_x
-                do k=1,n_lagrangian_points
-                    ! sum up forces acting on this point
-                    xGrid = x_edge(i)
-                    yGrid = y_edge(j)
-                    xLag = x_lag(k)
-                    yLag = y_lag(k)
-                    u_star(i,j) = u_star(i,j) + ustar_lagF(k) * delta_hxy(xGrid,yGrid,xLag,yLag)*h_l**2*dt
-                    v_star(i,j) = v_star(i,j) + vstar_lagF(k) * delta_hxy(xGrid,yGrid,xLag,yLag)*h_l**2*dt
-                enddo
-            enddo
-        enddo
+        !do j=1,N_y
+        !    do i=1,N_x
+        !        do k=1,n_lagrangian_points
+        !            ! sum up forces acting on this point
+        !            xGrid = x_edge(i)
+        !            yGrid = y_edge(j)
+        !            xLag = x_lag(k)
+        !            yLag = y_lag(k)
+        !            u_star(i,j) = u_star(i,j) + ustar_lagF(k) * delta_hxy(xGrid,yGrid,xLag,yLag)*h_l**2*dt
+        !            v_star(i,j) = v_star(i,j) + vstar_lagF(k) * delta_hxy(xGrid,yGrid,xLag,yLag)*h_l**2*dt
+        !        enddo
+        !    enddo
+        !enddo
 
         !call output_force_grid(frame,t,u_star,v_star)
 
