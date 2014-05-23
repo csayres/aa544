@@ -301,7 +301,7 @@ program main
 
     ! ====================================
     ! Solver parameters
-    integer, parameter :: MAX_ITERATIONS = 40000
+    integer, parameter :: MAX_ITERATIONS = 100000
     double precision, parameter :: TOLERANCE = 1d-4, CFL = 1.d0
     logical, parameter :: write_star = .false.
     integer :: n_steps
@@ -358,7 +358,7 @@ program main
 
 
 
-    n_steps = MAX_ITERATIONS/25 !Interval that u,v and p are printed to UVP.dat
+    n_steps = MAX_ITERATIONS/500 !Interval that u,v and p are printed to UVP.dat
 
 
 
