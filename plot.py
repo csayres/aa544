@@ -26,6 +26,8 @@ class DataMuncher(object):
         self.residMat = self.resid2Mat(residFile)
         assert len(self.xPts)==self.gridsize[0]
         assert len(self.yPts)==self.gridsize[1]
+        boxLength = uvpFile.split("_")[-1].split(".")[0]
+        self.figSuffix = "grid (%ix%i) box length (%s)" % (self.gridsize[0], self.gridsize[1], boxLength)
 
     def getTimeFromLine(self, line):
         """@param[in] line from uvpFile containing a new time point
@@ -165,14 +167,16 @@ class DataMuncher(object):
     def makeColorMaps(self, fast=False, tVector=None):
         if not tVector:
             tVector = self.tVector
-        for i,t in enumerate(tVector):
-            self.plotColorMap(i, "v", figName="v timestep :%.5f"%t, figTitle="timestep :%.2f"%t, fast=fast)
-            self.plotColorMap(i, "u", figName="u timestep :%.5f"%t, figTitle="timestep :%.2f"%t, fast=fast)
-            self.plotColorMap(i, "p", figName="p timestep :%.5f"%t, figTitle="timestep :%.2f"%t, fast=fast)
-            # self.plotQuiver(i, figName="quiver timestep :%.2f"%t)
-            # self.plotQuiverForce(i, figName="quiver Force timestep :%.2f"%t)
+        for i in len(tVector):
+            for j in ["u", "v", "p"]:
+                plotStr = j + " timestep(%i) " + self.figSuffix
+                fig = plt.figure()
+                ax = fig.add_subplot(111,aspect="equal")
+                self.plotColorMap(i, j, figTitle=plotStr, fast=fast)
+                plt.savefig(figName + '.eps', format='eps')
+                plt.close()
 
-    def plotColorMap(self, timeStep, u_v_or_p, figName=None, figTitle="pressure", fast=True):
+    def plotColorMap(self, timeStep, u_v_or_p, figTitle="", fast=True):
         """Plot a 2D color contour
 
         @param[in] int, timeStep to use (-1 is last time step)
@@ -180,8 +184,7 @@ class DataMuncher(object):
         @param[in] figName: name of the figure
         @param[in] figTitle: title for the figure
         """
-        fig = plt.figure()
-        ax = fig.add_subplot(111,aspect="equal")
+
         # grab the 2D matrix to plot
         plt.hold(True)
 
@@ -233,21 +236,6 @@ class DataMuncher(object):
         else:
             plt.show()
 
-    # def plotQuiverForce(self, timeStep, figName=None):
-    #     x,y,z1 = self.getXYZ(timeStep, self.forceMat, "u")
-    #     x,y,z2 = self.getXYZ(timeStep, self.forceMat, "v")
-    #     plt.quiver(x,y,z1,z2)
-    #     if figName:
-    #         plt.savefig(figName + '.eps', format='eps')
-    #         plt.close()
-    #     else:
-    #         plt.show()
-
-    def plotPressure(self, timeStep):
-        cmap = plt.get_cmap('winter')
-        x,y,z = self.getXYZ(timeStep, self.uvpMat, "p")
-        plt.scatter(x,y,c=z,cmap=cmap)
-
     def plotLagPoints(self):
         plt.plot(self.lagPoints[:,0], self.lagPoints[:,1], ".k-", alpha=0.5)
 
@@ -261,16 +249,15 @@ class DataMuncher(object):
         x.plotQuiverForce(timestep)
         plt.show()
 
-
 if __name__ == "__main__":
     # makeFigures()
     x = DataMuncher(
-        uvpFile="_output/UVP.dat",
-        lagFile="_output/lagrangian_points.dat",
-        forceFile="_output/force_grid.dat",
-        xFile="_output/x_points.dat",
-        yFile="_output/y_points.dat",
-        residFile="_output/residual.dat"
+        uvpFile="_output/UVP_ 64_2.dat",
+        lagFile="_output/lagrangian_points 64_2.dat",
+        forceFile="_output/force_grid 64_2.dat",
+        xFile="_output/x_points 64_2.dat",
+        yFile="_output/y_points 64_2.dat",
+        residFile="_output/residual_ 64_2.dat"
     )
     # x.plotAll(-1)
     x.makeColorMaps()
