@@ -11,7 +11,7 @@ import matplotlib.mlab as ml
 # rc('font', family='serif')
 
 class DataMuncher(object):
-    def __init__(self, uvpFile, lagFile, forceFile, xFile, yFile):
+    def __init__(self, uvpFile, lagFile, forceFile, xFile, yFile, residFile):
         """Object for interacting with fortran code output, various plotting methods, etc.
 
         @param[in] uvpFile: string, path to [uvpFile].dat, output from fortran routine
@@ -23,6 +23,7 @@ class DataMuncher(object):
         self.lagPoints = self.lagFile2Mat(lagFile)
         self.xPts = numpy.loadtxt(xFile)
         self.yPts = numpy.loadtxt(yFile)
+        self.residMat = self.resid2Mat(residFile)
         assert len(self.xPts)==self.gridsize[0]
         assert len(self.yPts)==self.gridsize[1]
 
@@ -41,6 +42,34 @@ class DataMuncher(object):
         gridsize = [int(x) for x in line.split() if x not in ("Grid", "Size")]
         assert len(gridsize) == 2
         return gridsize
+
+    def resid2Mat(self, residualFile):
+        """Convert an residual file (output from fortran code) into a 2D numpy matrix
+
+        @param[in] residualFile: string, path to [residualFile].dat, output from fortran routine
+        @return a 2D numpy array of shape n x [n, i, j, resid]
+        """
+        outArray = []
+        with open(residualFile, 'r') as f:
+            lines = f.readlines()
+        for line in lines:
+            # skip first two lines which only contain header info
+            # split on whitespace, cast to floats
+            lineArray = [float(x) for x in line.split()]
+            # append to outArray
+            outArray.append(lineArray)
+        # return a numpy matrix
+        return numpy.asarray(outArray, dtype=float)
+
+    def plotResidSemiLog(self, figName):
+        """Plot the residual vs number of steps
+        """
+        plt.figure()
+        plt.plot(self.residMat[:,0], numpy.log(self.residMat[:,-1]), '.k')
+        plt.xlabel("Step Number")
+        plt.ylabel("Log Residual")
+        plt.savefig(figName + '.eps', format='eps')
+        plt.close()
 
     def lagFile2Mat(self, lagFile):
         """Convert a lagFile into a 2D array
@@ -74,6 +103,15 @@ class DataMuncher(object):
                 line = f.readline()
                 if not line:
                     # end of file
+                    if len(uArray) == gridsize[0] * gridsize[1]:
+                        print 'got all data!'
+                        uOut.append(numpy.asarray(uArray, dtype=float))
+                        vOut.append(numpy.asarray(vArray, dtype=float))
+                        pOut.append(numpy.asarray(pArray, dtype=float))
+                    else:
+                        # remove the last time point, we dont have
+                        # all the data
+                        tVector.pop(-1)
                     break
                 if "VARIABLES" in line:
                     continue
@@ -94,9 +132,6 @@ class DataMuncher(object):
                     uArray.append(lineArray[2])
                     vArray.append(lineArray[3])
                     pArray.append(lineArray[4])
-            uOut.append(numpy.asarray(uArray, dtype=float))
-            vOut.append(numpy.asarray(vArray, dtype=float))
-            pOut.append(numpy.asarray(pArray, dtype=float))
         # return a numpy matrix
         self.gridsize = gridsize
         self.tVector = tVector
@@ -107,10 +142,10 @@ class DataMuncher(object):
         self.y = yArray
 
     def reshapeZ(self, Z):
-        Z = numpy.reshape(z, (self.gridsize[0],self.gridsize[1]), order="F")
+        Z = numpy.reshape(Z, (self.gridsize[0],self.gridsize[1]), order="F")
         return Z
 
-    def getUVorP(self, u_v_or_p):
+    def getUVorP(self, u_v_or_p, timeStep):
         assert u_v_or_p in ["u", "v", "p"]
         # fig = plt.figure()
         if u_v_or_p == "u":
@@ -122,18 +157,18 @@ class DataMuncher(object):
         return z
 
     def getGridData(self, timeStep, u_v_or_p):
-        z = getUVorP(u_v_or_p)
+        z = self.getUVorP(u_v_or_p, timeStep)
         X,Y = numpy.meshgrid(self.xPts,self.yPts)
         Z = self.reshapeZ(z)
         return X,Y,Z
 
-    def makeColorMaps(self, fast=True, tVector=None):
+    def makeColorMaps(self, fast=False, tVector=None):
         if not tVector:
             tVector = self.tVector
         for i,t in enumerate(tVector):
-            self.plotColorMap(i, "v", figName="v timestep :%.2f"%t, figTitle="timestep :%.2f"%t, fast=fast)
-            self.plotColorMap(i, "u", figName="u timestep :%.2f"%t, figTitle="timestep :%.2f"%t, fast=fast)
-            self.plotColorMap(i, "p", figName="p timestep :%.2f"%t, figTitle="timestep :%.2f"%t, fast=fast)
+            self.plotColorMap(i, "v", figName="v timestep :%.5f"%t, figTitle="timestep :%.2f"%t, fast=fast)
+            self.plotColorMap(i, "u", figName="u timestep :%.5f"%t, figTitle="timestep :%.2f"%t, fast=fast)
+            self.plotColorMap(i, "p", figName="p timestep :%.5f"%t, figTitle="timestep :%.2f"%t, fast=fast)
             # self.plotQuiver(i, figName="quiver timestep :%.2f"%t)
             # self.plotQuiverForce(i, figName="quiver Force timestep :%.2f"%t)
 
@@ -163,9 +198,9 @@ class DataMuncher(object):
         # X, Y = numpy.meshgrid(x,y)
         # Z = ml.griddata(x, y, z, xi, yi)
         if fast:
-            z = getUVorP(u_v_or_p)
+            z = self.getUVorP(u_v_or_p, timeStep)
             Z = self.reshapeZ(z)
-            plt.imshow(Z)
+            plt.imshow(Z.T, cmap=cmap)
         else:
             X,Y,Z = self.getGridData(timeStep, u_v_or_p)
             # Z = scipy.interpolate.griddata(x,y,z,(xi,yi))
@@ -214,7 +249,7 @@ class DataMuncher(object):
         plt.scatter(x,y,c=z,cmap=cmap)
 
     def plotLagPoints(self):
-        plt.plot(self.lagPoints[:,0], self.lagPoints[:,1], "ok")
+        plt.plot(self.lagPoints[:,0], self.lagPoints[:,1], ".k-", alpha=0.5)
 
     def plotAll(self, timestep):
         fig = plt.figure();
@@ -229,9 +264,15 @@ class DataMuncher(object):
 
 if __name__ == "__main__":
     # makeFigures()
-    t1 = time.time()
-    x = DataMuncher(uvpFile="_output/UVP.dat", lagFile="_output/lagrangian_points.dat", forceFile="_output/force_grid.dat", xFile="_output/x_points.dat", yFile="_output/y_points.dat")
+    x = DataMuncher(
+        uvpFile="_output/UVP.dat",
+        lagFile="_output/lagrangian_points.dat",
+        forceFile="_output/force_grid.dat",
+        xFile="_output/x_points.dat",
+        yFile="_output/y_points.dat",
+        residFile="_output/residual.dat"
+    )
     # x.plotAll(-1)
-    t2 = time.time()
     x.makeColorMaps()
+    x.plotResidSemiLog("resid")
 

@@ -165,7 +165,7 @@ contains
         ! local
         double precision :: r
         r = (n1 - n2) / h
-        delta_h1 = 1 / h * phi_r(r)
+        delta_h1 = 1.d0 / h * phi_r(r)
     end function delta_h1
 
     ! phi_r function
@@ -301,7 +301,7 @@ program main
     ! ====================================
     ! Solver parameters
     integer, parameter :: MAX_ITERATIONS = 10000
-    double precision, parameter :: TOLERANCE = 1.d-4, CFL = 0.8d0
+    double precision, parameter :: TOLERANCE = 0.5d-5, CFL = 0.8d0
     logical, parameter :: write_star = .false.
     integer :: n_steps
 
@@ -358,21 +358,20 @@ program main
 !!!!!!!!!!!!!!!!!!
 
     !N_x=10  !Number of grid points in x-direction
-    N_y = 60   !Number of grid points in y-direction
+    N_y = 62   !Number of grid points in y-direction
     L_x = 30 !Length of box in x-direction
     L_y = 30  !Length of box in y-direction
-    n_steps = MAX_ITERATIONS/100 !Interval that u,v and p are printed to UVP.dat
-    Re = 50.d0   !Reynolds number
+    n_steps = MAX_ITERATIONS/50 !Interval that u,v and p are printed to UVP.dat
     ! Setup grid and arrays
     call setup_grid()
     call output_grid_centers()
 
     !!! Lagrangian Points
-    HL_y = 0.05 * L_y  ! Length of rect bluff y-direction
+    HL_y = 0.1 * L_y  ! Length of rect bluff y-direction
     HL_x = HL_y ! Length of rect bluff in x-direction
-    H_xOffset = 0.5 * L_x ! how far along x before bluff starts, bluff will always be
+    H_xOffset = 0.25 * L_x ! how far along x before bluff starts, bluff will always be
                            ! centered in the domain.
-    h_l = h ! spacing of lagrangian points
+    h_l = 0.5*h ! spacing of lagrangian points
     ! determine number of points in x and y directions
     nlx = HL_x / h_l
     nly = HL_y / h_l
@@ -380,8 +379,6 @@ program main
     call setup_lagrangian_points()
     call output_lagrangian_points()
     ! ===================================
-
-
 
     allocate(Flux_ux(1:N_x+1,0:N_y+1))
     allocate(Flux_uy(0:N_x,0:N_y))
@@ -419,20 +416,26 @@ program main
     !enddo
     v = 0.d0
     p = 0.d0
-    dt = CFL * h / (Re * U_inf) / 10.d0
-    !dt = h / 50.d0
+
+    nu = 1.d-3 !1.d0/Re
+    Re = 1.d0/nu
+    !Re = 1000.d0
+    !nu = 1.d0/Re
+    rho = 1.d0
+    dt =  h / (Re * U_inf) !* CFL
+    !dt = h / (Re * U_inf)
+    !dt = h / 1000.
     t = 0.d0
     frame = 0
 
-    nu = 1.d0/Re !1.d-3 !1.d0/Re
-    rho = 1.d0
+
 
     ! Output inital condition
     call output_grid(frame,t,u,v,p)
     print "(a,i3,a,i4,a,e16.8)","Writing frame ",frame," during step n=",0," t=",t
 
     ! Open up file to store residual information in
-    !open(unit=13, file='residual.dat', status="unknown", action="write")
+    open(unit=13, file='_output/residual.dat', status="unknown", action="write")
 
     ! ===================================
     ! Main algorithm loop
@@ -489,8 +492,8 @@ program main
                 v_yy = (y_edge(j) / h**2) * (y_center(j+1) * (v(i,j+1) - v(i,j)) - y_center(j) * (v(i,j) - v(i,j-1)))
 
                 ! Update to u* and v* values
-                u_star(i,j) = u(i,j) + dt * (-1*(uu_x + uv_y) + nu*(u_xx + u_yy))
-                v_star(i,j) = v(i,j) + dt * (-1*(uv_x+vv_y) + nu*(v_xx + v_yy))
+                u_star(i,j) = u(i,j) + dt * (-1.d0*(uu_x + uv_y) + nu*(u_xx + u_yy))
+                v_star(i,j) = v(i,j) + dt * (-1.d0*(uv_x+vv_y) + nu*(v_xx + v_yy))
             enddo
         enddo
 
@@ -559,44 +562,46 @@ program main
 
     ! ===================================
         ! Check convergence
-        !R = 0.d0
-        !do j=1,N_y
-        !    do i=1,N_x
-         !       if (R < abs(u(i,j)-u_old(i,j)) .or. R < abs(v(i,j)-v_old(i,j))) then
-         !           R = max(R,abs(u(i,j)-u_old(i,j)),abs(v(i,j)-v_old(i,j)))
-         !           i_R = i
-         !           j_R = j
-         !       endif
-         !   enddo
-        !enddo
+        R = 0.d0
+        do j=1,N_y
+            do i=1,N_x
+                if (R < abs(u(i,j)-u_old(i,j)) .or. R < abs(v(i,j)-v_old(i,j))) then
+                    R = max(R,abs(u(i,j)-u_old(i,j)),abs(v(i,j)-v_old(i,j)))
+                    i_R = i
+                    j_R = j
+                endif
+            enddo
+        enddo
 
         ! Finish up loop
         !print "(a,i4,a,i3,a,i3,a,e16.8)","Loop ",n,": (",i_R,",",j_R,") - R = ",R
-        !write (13,"(i4,i4,i4,e16.8)") n,i_R,j_R,R
+        write (13,"(i5,i4,i4,e16.8)") n,i_R,j_R,R
         ! Write out u,v,p every n_steps
         if (mod(n,n_steps) == 0) then
             frame = frame + 1
             call output_grid(frame,t,u,v,p)
+            print *, "R = ", R
             print "(a,i3,a,i4,a,e16.8)","Writing frame ",frame," during step n=",n," t=",t
         endif
         ! Check tolerance
-        !if (R < TOLERANCE) then
-        !    print *, "Convergence reached, R = ",R
-        !    call output_grid(frame,t,u,v,p)
-        !    print "(a,i3,a,i4,a,e16.8)","Writing frame ",frame," during step n=",n," t=",t
-        !    exit
-        !endif
+        if (R < TOLERANCE) then
+            print *, "Convergence reached, R = ",R
+            call output_grid(frame,t,u,v,p)
+            print "(a,i3,a,i4,a,e16.8)","Writing frame ",frame," during step n=",n," t=",t
+            exit
+        endif
         ! We did not reach our tolerance, iterate again
         t = t + dt
     enddo
-    !if (R > TOLERANCE) then
-    !    print "(a,e16.8)","Convergence was never reached, R = ", R
-    !endif
-    call output_grid(frame,t,u,v,p) ! ouput last grid?
-!    print "(a,i3,a,i4,a,e16.8)","Tolerance reaced!, Writing frame ",frame," during step n=",n," t=",t
-    !close(13)
+    if (R > TOLERANCE) then
+        print "(a,e16.8)","Convergence was never reached, R = ", R
+
+        call output_grid(frame,t,u,v,p) ! ouput last grid?
+    endif
+    print "(a,i3,a,i4,a,e16.8)","Tolerance reaced!, Writing frame ",frame," during step n=",n," t=",t
+    close(13)
     close(70)
-    close(77)
+    !close(77)
 end program main
 
 
@@ -697,7 +702,7 @@ subroutine solve_poisson(P,Q,a,b,cm,cp)
     ! Solver parameters
     logical, parameter :: verbose = .false.
     integer, parameter :: MAX_ITERATIONS = 10000
-    double precision, parameter :: TOLERANCE = 10.d-8
+    double precision, parameter :: TOLERANCE = 10.d-4
     double precision, parameter :: w = 1.6d0 ! 1 (GS) < w < 2
 
     ! Local variables
