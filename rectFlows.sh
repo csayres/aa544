@@ -1,5 +1,5 @@
 #!/bin/bash
-./a.out 64 1 &
+./a.out 44 1 &
 ./a.out 64 2 &
 ./a.out 64 5 &
 
