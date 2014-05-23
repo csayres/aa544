@@ -418,7 +418,7 @@ program main
     enddo
     v = 0.d0
     p = 0.d0
-    dt = CFL * h / (Re * U_inf) / 5.d0
+    dt = CFL * h / (Re * U_inf) / 10.d0
     !dt = h / 50.d0
     t = 0.d0
     frame = 0
