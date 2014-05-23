@@ -167,13 +167,13 @@ class DataMuncher(object):
     def makeColorMaps(self, fast=False, tVector=None):
         if not tVector:
             tVector = self.tVector
-        for i in len(tVector):
+        for i in range(len(tVector)):
             for j in ["u", "v", "p"]:
-                plotStr = j + " timestep(%i) " + self.figSuffix
+                plotStr = j + " frame(%i) "%i + self.figSuffix
                 fig = plt.figure()
                 ax = fig.add_subplot(111,aspect="equal")
                 self.plotColorMap(i, j, figTitle=plotStr, fast=fast)
-                plt.savefig(figName + '.eps', format='eps')
+                plt.savefig(plotStr + '.eps', format='eps')
                 plt.close()
 
     def plotColorMap(self, timeStep, u_v_or_p, figTitle="", fast=True):
@@ -222,11 +222,6 @@ class DataMuncher(object):
         plt.xlabel("x location")
         plt.ylabel("y location")
         # im = plt.imshow(value)
-        if figName:
-            plt.savefig(figName + '.eps', format='eps')
-            plt.close()
-        else:
-            plt.show()
 
     def plotQuiver(self, timeStep, figName=None):
         plt.quiver(self.x,self.y,self.u[timeStep],self.v[timeStep])
@@ -249,17 +244,38 @@ class DataMuncher(object):
         x.plotQuiverForce(timestep)
         plt.show()
 
+def createDataMuncher(gridsize, boxLength):
+    if gridsize < 100:
+        gs = ' %i'%gridsize
+    else:
+        gs = '%i'%gridsize
+    return DataMuncher(
+        uvpFile="_output/UVP_%s_%i.dat"%(gs, boxLength),
+        lagFile="_output/lagrangian_points%s_%i.dat"%(gs, boxLength),
+        forceFile="_output/force_grid%s_%i.dat"%(gs, boxLength),
+        xFile="_output/x_points%s_%i.dat"%(gs, boxLength),
+        yFile="_output/y_points%s_%i.dat"%(gs, boxLength),
+        residFile="_output/residual_%s_%i.dat"%(gs, boxLength),
+        )
+
+def makeDataMunchDict(gridsizes, boxLengths):
+    outDict = {}
+    for gridsize in strgs:
+        outDict[str(gridsize)] = {}
+        for boxLength in boxLengths:
+            outDict[str(gridsize)][str(boxLength)] = createDataMuncher(gridsize, boxLength)
+    return outDict
+
+class elJefe(object):
+    """Object for managing / plotting all runs!
+    """
+    pass
+
+
 if __name__ == "__main__":
     # makeFigures()
-    x = DataMuncher(
-        uvpFile="_output/UVP_ 64_2.dat",
-        lagFile="_output/lagrangian_points 64_2.dat",
-        forceFile="_output/force_grid 64_2.dat",
-        xFile="_output/x_points 64_2.dat",
-        yFile="_output/y_points 64_2.dat",
-        residFile="_output/residual_ 64_2.dat"
-    )
+    x = createDataMuncher(256, 5)
     # x.plotAll(-1)
-    x.makeColorMaps()
+    #x.makeColorMaps()
     x.plotResidSemiLog("resid")
 
