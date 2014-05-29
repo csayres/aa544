@@ -31,7 +31,7 @@ module grid_module
     ! ---v---|---v---|---v--- <--- y_edge
     !        |       |
     double precision, allocatable :: x_edge(:),x_center(:), x_lag(:), x_euler_per_lag(:,:)
-    double precision, allocatable :: y_edge(:),y_center(:), y_lag(:), , y_euler_per_lag(:,:)
+    double precision, allocatable :: y_edge(:),y_center(:), y_lag(:), y_euler_per_lag(:,:)
 
 contains
 
@@ -132,26 +132,30 @@ contains
 
     subroutine setup_subDomain()
 
-    ! four indices per lagrangian point (in x and y)
-    allocate(x_euler_per_lag(1:n_lagrangian_points, 5))
-    allocate(y_euler_per_lag(1:n_lagrangian_points, 5))
-    do i=1,n_lagrangian_points
-        ! get the closest indices to lagrangian point on the eulerian grid
-        x_ind = x_lag(i)/h
-        y_ind = y_lag(i)/h
-        ! add 2 on either side
-        y_euler_per_lag(i,1) = y_ind - 2
-        y_euler_per_lag(i,2) = y_ind - 1
-        y_euler_per_lag(i,3) = y_ind
-        y_euler_per_lag(i,4) = y_ind + 1
-        y_euler_per_lag(i,5) = y_ind + 2
+        ! local
+        integer :: i
+        integer :: x_ind, y_ind
 
-        x_euler_per_lag(i,1) = x_ind - 2
-        x_euler_per_lag(i,2) = x_ind - 1
-        x_euler_per_lag(i,3) = x_ind
-        x_euler_per_lag(i,4) = x_ind + 1
-        x_euler_per_lag(i,5) = x_ind + 2
-    end do
+        ! four indices per lagrangian point (in x and y)
+        allocate(x_euler_per_lag(1:n_lagrangian_points, 1:5))
+        allocate(y_euler_per_lag(1:n_lagrangian_points, 1:5))
+        do i=1,n_lagrangian_points
+            ! get the closest indices to lagrangian point on the eulerian grid
+            x_ind = x_lag(i)/h
+            y_ind = y_lag(i)/h
+            ! add 2 on either side
+            y_euler_per_lag(i,1) = y_ind - 2
+            y_euler_per_lag(i,2) = y_ind - 1
+            y_euler_per_lag(i,3) = y_ind
+            y_euler_per_lag(i,4) = y_ind + 1
+            y_euler_per_lag(i,5) = y_ind + 2
+
+            x_euler_per_lag(i,1) = x_ind - 2
+            x_euler_per_lag(i,2) = x_ind - 1
+            x_euler_per_lag(i,3) = x_ind
+            x_euler_per_lag(i,4) = x_ind + 1
+            x_euler_per_lag(i,5) = x_ind + 2
+        end do
 
     end subroutine setup_subDomain
 
@@ -161,12 +165,12 @@ contains
         integer :: i
         open(unit=35,file='_output/x_points'//fileSuffix//'.dat',access='sequential',status='unknown')
         do i=1,N_x
-            write(35,*) x_edge(i)
+            write(35,*) x_center(i)
         enddo
         close(35)
         open(unit=35,file='_output/y_points'//fileSuffix//'.dat',access='sequential',status='unknown')
         do i=1,N_y
-            write(35,*) y_edge(i)
+            write(35,*) y_center(i)
         enddo
         close(35)
     end subroutine output_grid_centers
@@ -329,8 +333,8 @@ program main
 
     ! ====================================
     ! Solver parameters
-    integer, parameter :: MAX_ITERATIONS = 100000
-    double precision, parameter :: TOLERANCE = 1d-4, CFL = 0.02
+    integer, parameter :: MAX_ITERATIONS = 10000
+    double precision, parameter :: TOLERANCE = 1d-4, CFL = 0.002
     logical, parameter :: write_star = .false.
     integer :: n_steps
 
@@ -347,7 +351,7 @@ program main
     ! ===================================
     ! Locals
     character*20 :: arg
-    integer :: i,j,n,m,frame,i_R,j_R, k, boxLen
+    integer :: i,ii,j,jj,n,m,frame,i_R,j_R, k, boxLen
     double precision :: R,t,dt,a, lagFuSum, lagFvSum
     double precision, allocatable :: Flux_ux(:,:),Flux_uy(:,:),Flux_vy(:,:)
     double precision :: uu_x,uv_y,uv_x,vv_y,u_xx,u_yy,v_xx,v_yy
@@ -382,11 +386,11 @@ program main
     !N_x=10  !Number of grid points in x-direction
     !N_y = 128   !Number of grid points in y-direction
     L_x = 40 !Length of box in x-direction
-    L_y = 10  !Length of box in y-direction
+    L_y = 40  !Length of box in y-direction
 
 
 
-    n_steps = MAX_ITERATIONS/500 !Interval that u,v and p are printed to UVP.dat
+    n_steps = MAX_ITERATIONS/50 !Interval that u,v and p are printed to UVP.dat
 
 
 
@@ -407,6 +411,7 @@ program main
     n_lagrangian_points = 2*nlx + 2*nly
     call setup_lagrangian_points()
     call output_lagrangian_points()
+    call setup_subDomain()
     ! ===================================
 
     allocate(Flux_ux(1:N_x+1,0:N_y+1))
@@ -555,12 +560,14 @@ program main
             ! initialize to zero
             ustar_lagF(k) = 0.d0
             vstar_lagF(k) = 0.d0
-            do j=1,5
-                do i=1,5
+            do jj=1,5
+                do ii=1,5
                     ! convenience variables
                     ! WARNING: use edge or centers???!!!!
-                    xGrid = x_edge(x_euler_per_lag(k,i))
-                    yGrid = y_edge(y_euler_per_lag(k,j))
+                    i = x_euler_per_lag(k,ii)
+                    j = y_euler_per_lag(k,jj)
+                    xGrid = x_edge(i)
+                    yGrid = y_edge(j)
                     xLag = x_lag(k)
                     yLag = y_lag(k)
                     ustar_lagF(k) = ustar_lagF(k) + (-1.d0) * u_star(i,j) * delta_hxy(xGrid,yGrid,xLag,yLag)*h**2/dt
@@ -584,12 +591,14 @@ program main
 !            enddo
 !        enddo
 
-        do j=1,5
-            do i=1,5
+        do jj=1,5
+            do ii=1,5
                 do k=1,n_lagrangian_points
                     ! sum up forces acting on this point
-                    xGrid = x_edge(x_euler_per_lag(k,i))
-                    yGrid = y_edge(y_euler_per_lag(k,j))
+                    i = x_euler_per_lag(k,ii)
+                    j = y_euler_per_lag(k,jj)
+                    xGrid = x_edge(i)
+                    yGrid = y_edge(j)
                     xLag = x_lag(k)
                     yLag = y_lag(k)
                     u_star(i,j) = u_star(i,j) + ustar_lagF(k) * delta_hxy(xGrid,yGrid,xLag,yLag)*h_l**2*dt

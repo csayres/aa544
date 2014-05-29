@@ -195,7 +195,7 @@ class DataMuncher(object):
                 fig = plt.figure()
                 ax = fig.add_subplot(111,aspect="equal")
                 self.plotColorMap(i, j, figTitle=plotStr, fast=fast)
-                plt.savefig(saveDir+plotStr + '.eps', format='eps')
+                plt.savefig(saveDir+plotStr + '.png', format='png')
                 plt.close()
 
     def plotColorMap(self, timeStep, u_v_or_p, figTitle="", fast=True):
@@ -225,7 +225,8 @@ class DataMuncher(object):
         if fast:
             z = self.getUVorP(u_v_or_p, timeStep)
             Z = self.reshapeZ(z)
-            plt.imshow(Z.T, vmin=0.5, vmax=1.5)
+
+            plt.imshow(Z.T, vmin=-0.5, vmax=1.5)
         else:
             X,Y,Z = self.getGridData(timeStep, u_v_or_p)
             # Z = scipy.interpolate.griddata(x,y,z,(xi,yi))
@@ -248,7 +249,7 @@ class DataMuncher(object):
     def plotQuiver(self, timeStep, figName=None):
         plt.quiver(self.x,self.y,self.u[timeStep],self.v[timeStep])
         if figName:
-            plt.savefig(figName + '.eps', format='eps')
+            plt.savefig(figName + '.png', format='png')
             plt.close()
         else:
             plt.show()
@@ -320,8 +321,6 @@ class elJefe(object):
         jefeList = []
         ii = 0
         for uvp, lag, resid, xf, yf in itertools.izip(uvpFiles,lagFiles,residFiles,xFiles,yFiles):
-            if ii > 8:
-                break
             jefeList.append(
                 DataMuncher(
                     uvpFile=uvp,
@@ -350,7 +349,7 @@ class elJefe(object):
         plt.close()
 
     def plotProfiles(self):
-        dm = self.jefeList[7]
+        dm = self.jefeList[0]
         dm.plotVelocityProfiles(-1)
 
     def dump2dirs(self, base):
@@ -360,8 +359,6 @@ class elJefe(object):
             dm.makeColorMaps(saveDir=dirName+"/")
             # next convert to pdf
             allEps = glob.glob(dirName+"/*.eps")
-            for eps in allEps:
-                os.system("ps2pdf -dEPSCrop " + eps)
 
 
 
@@ -391,8 +388,10 @@ if __name__ == "__main__":
     # x.makeColorMaps()
     # x.plotResidSemiLog("resid")
 
-    elJefe = elJefe("_output_stat/_output")
+    elJefe = elJefe("_output")
+    elJefe.jefeList[0].makeColorMaps(fast=False)
+    elJefe.jefeList[0].plotQuiver(-1, 'quiver')
     #elJefe.plotUVP_resArray()
-    elJefe.plotProfiles()
+    #elJefe.plotProfiles()
     #elJefe.dump2dirs("flow")
 
