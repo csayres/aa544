@@ -302,7 +302,7 @@ program main
     ! ====================================
     ! Solver parameters
     integer, parameter :: MAX_ITERATIONS = 100000
-    double precision, parameter :: TOLERANCE = 1d-4, CFL = 1.d0
+    double precision, parameter :: TOLERANCE = 1d-4, CFL = 0.02
     logical, parameter :: write_star = .false.
     integer :: n_steps
 
@@ -421,7 +421,8 @@ program main
     !Re = 100.0
     nu = 1.d0/Re
     rho = 1.d0
-    dt =  CFL * h / 500.d0
+    !dt =  CFL * h / 500.d0
+    dt = CFL * h / (Re * U_inf)
     t = 0.d0
     frame = 0
 

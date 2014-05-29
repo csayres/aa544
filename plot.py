@@ -1,10 +1,14 @@
 # -*- coding: utf-8 -*-
 import numpy
+import itertools
 import time
 import scipy.interpolate
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.mlab as ml
+import glob
+import os
+import bisect
 
 # from matplotlib import rc
 # rc('text', usetex=True)
@@ -28,6 +32,9 @@ class DataMuncher(object):
         #boxLength = uvpFile.split("_")[-1].split(".")[0]
         boxLength = int(numpy.max(self.lagPoints[:,1]) - numpy.min(self.lagPoints[:,1]) / (numpy.max(self.lagPoints[:,0]) - numpy.min(self.lagPoints[:,0])) )
         self.figSuffix = "grid (%ix%i) box length (%s)" % (self.gridsize[0], self.gridsize[1], boxLength)
+        self.uProfileIndex = bisect.bisect(self.xPts, numpy.max(self.lagPoints[:,1]))
+        self.vProfileIndex = len(self.yPts)/2
+        # get first true index
 
     def getTimeFromLine(self, line):
         """@param[in] line from uvpFile containing a new time point
@@ -54,12 +61,12 @@ class DataMuncher(object):
         outArray = []
         with open(residualFile, 'r') as f:
             lines = f.readlines()
-        for line in lines:
+        for ind, line in enumerate(lines):
             # skip first two lines which only contain header info
             # split on whitespace, cast to floats
-            lineArray = [float(x) for x in line.split()]
+            resid = float(line.split()[-1])
             # append to outArray
-            outArray.append(lineArray)
+            outArray.append([ind, resid])
         # return a numpy matrix
         return numpy.asarray(outArray, dtype=float)
 
@@ -164,7 +171,22 @@ class DataMuncher(object):
         Z = self.reshapeZ(z)
         return X,Y,Z
 
-    def makeColorMaps(self, fast=True, tVector=None):
+    def plotVelocityProfiles(self, timeStep):
+        fig = plt.figure()
+        x,y,zu = self.getGridData(timeStep, "u")
+        x,y,zv = self.getGridData(timeStep, "v")
+        ax = fig.add_subplot(1,2,1)
+        plt.plot(self.xPts, zu[:,self.uProfileIndex])
+        plt.title("u")
+        ax = fig.add_subplot(1,2,2)
+        plt.plot(self.yPts, zv[self.vProfileIndex,:])
+        plt.title("v")
+        plt.savefig('velocityprofiles.pdf', format='pdf')
+        plt.close()
+
+
+
+    def makeColorMaps(self, fast=True, tVector=None, saveDir=""):
         if not tVector:
             tVector = self.tVector
         for i in range(len(tVector)):
@@ -173,7 +195,7 @@ class DataMuncher(object):
                 fig = plt.figure()
                 ax = fig.add_subplot(111,aspect="equal")
                 self.plotColorMap(i, j, figTitle=plotStr, fast=fast)
-                plt.savefig(plotStr + '.eps', format='eps')
+                plt.savefig(saveDir+plotStr + '.eps', format='eps')
                 plt.close()
 
     def plotColorMap(self, timeStep, u_v_or_p, figTitle="", fast=True):
@@ -234,6 +256,7 @@ class DataMuncher(object):
     def plotLagPoints(self):
         plt.plot(self.lagPoints[:,0], self.lagPoints[:,1], ".k-", alpha=0.5)
 
+
     def plotAll(self, timestep):
         fig = plt.figure();
         ax = fig.add_subplot(111, aspect='equal');
@@ -269,20 +292,107 @@ def makeDataMunchDict(gridsizes, boxLengths):
 class elJefe(object):
     """Object for managing / plotting all runs!
     """
-    pass
+    def __init__(self, fileDir):
+        self.fileDir = fileDir
+        allFiles = glob.glob(fileDir + "/*")
+        uvpFiles = []
+        residFiles = []
+        xFiles = []
+        yFiles = []
+        lagFiles = []
+        for f in allFiles:
+            if 'lagrangian' in f:
+                lagFiles.append(f)
+            elif 'UVP' in f:
+                uvpFiles.append(f)
+            elif 'residual' in f:
+                residFiles.append(f)
+            elif 'x_points' in f:
+                xFiles.append(f)
+            elif 'y_points' in f:
+                yFiles.append(f)
+        # sortem
+        uvpFiles.sort()
+        residFiles.sort()
+        xFiles.sort()
+        yFiles.sort()
+        lagFiles.sort()
+        jefeList = []
+        ii = 0
+        for uvp, lag, resid, xf, yf in itertools.izip(uvpFiles,lagFiles,residFiles,xFiles,yFiles):
+            if ii > 8:
+                break
+            jefeList.append(
+                DataMuncher(
+                    uvpFile=uvp,
+                    lagFile = lag,
+                    xFile = xf,
+                    yFile = yf,
+                    residFile = resid
+                    )
+                )
+            ii += 1
+        self.jefeList = jefeList
+
+    def plotUVP_resArray(self):
+        inds = [22,4,7]
+        fig = plt.figure()
+        plotnum = 1
+        for ii,ind in enumerate(inds):
+            dm = self.jefeList[ind]
+            for jj, j in enumerate(["u", "v", "p"]):
+                plotStr = j
+                print 'number', plotnum
+                ax = fig.add_subplot(3, 3, plotnum, aspect="equal")
+                dm.plotColorMap(-1, j, figTitle=plotStr, fast=False)
+                plotnum += 1
+        plt.savefig('resarray.pdf', format='pdf')
+        plt.close()
+
+    def plotProfiles(self):
+        dm = self.jefeList[7]
+        dm.plotVelocityProfiles(-1)
+
+    def dump2dirs(self, base):
+        for int, dm in enumerate(self.jefeList):
+            dirName = base + str(int)
+            os.mkdir(dirName)
+            dm.makeColorMaps(saveDir=dirName+"/")
+            # next convert to pdf
+            allEps = glob.glob(dirName+"/*.eps")
+            for eps in allEps:
+                os.system("ps2pdf -dEPSCrop " + eps)
+
+
+
+
+
+def cleanUpDir(d):
+    allFiles = glob.glob(d+"/*")
+    for f in allFiles:
+        fnew = f[:]
+        fnew = fnew.replace(" ", "")
+        fnew = fnew.replace("..", ".")
+        print f, fnew
+        os.rename(f, fnew)
 
 
 if __name__ == "__main__":
     # makeFigures()
     #x = createDataMuncher(256, 5)
-    x = DataMuncher(
-        uvpFile="_output/UVP.dat",
-        lagFile="_output/lagrangian_points.dat",
-        xFile="_output/x_points.dat",
-        yFile="_output/y_points.dat",
-        residFile="_output/residual.dat",
-        )
+    # x = DataMuncher(
+    #     uvpFile="_output/UVP.dat",
+    #     lagFile="_output/lagrangian_points.dat",
+    #     xFile="_output/x_points.dat",
+    #     yFile="_output/y_points.dat",
+    #     residFile="_output/residual.dat",
+    #     )
     # x.plotAll(-1)
-    x.makeColorMaps()
-    x.plotResidSemiLog("resid")
+    # x.makeColorMaps()
+    # x.plotResidSemiLog("resid")
+
+    elJefe = elJefe("_output_stat/_output")
+    #elJefe.plotUVP_resArray()
+    elJefe.plotProfiles()
+    #elJefe.dump2dirs("flow")
 
