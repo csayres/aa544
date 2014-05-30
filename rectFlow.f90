@@ -424,7 +424,7 @@ program main
     L_y = 300  !Length of box in y-direction
 
 
-    n_steps = MAX_ITERATIONS/500 !Interval that u,v and p are printed to UVP.dat
+    n_steps = MAX_ITERATIONS/250 !Interval that u,v and p are printed to UVP.dat
 
 
 
