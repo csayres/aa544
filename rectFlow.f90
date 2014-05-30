@@ -17,7 +17,7 @@ module grid_module
 
     ! Grid parameters
     integer :: N_y , N_x, nlx, nly, n_lagrangian_points
-    double precision :: L_x, h, L_y, HL_y, HL_x, H_xOffset, h_l
+    double precision :: L_x, h, L_y, HL_y, HL_x, H_xOffset, h_l, Re
     character*20 :: fileSuffix
 
     ! Grid arrays
@@ -317,7 +317,7 @@ contains
 
         if (t==0) then
         open(unit=77,file='_output/force_grid.dat',access='sequential',status='unknown')
-        write(77,*) "Grid Size", N_y, N_x
+        write(77,*) "Grid Size", N_y, N_x, "Reynolds = ", Re
         write(77,*) ' VARIABLES= "x", "y", "u", "v"'
         write(77,100) t,N_X,N_Y
         endif
@@ -368,7 +368,7 @@ program main
 
     ! ====================================
     ! Solver parameters
-    integer, parameter :: MAX_ITERATIONS = 1000
+    integer, parameter :: MAX_ITERATIONS = 10000
     double precision, parameter :: TOLERANCE = 1d-4, CFL = 0.02
     logical, parameter :: write_star = .false.
     integer :: n_steps
@@ -376,7 +376,7 @@ program main
     ! ===================================
     ! Physics
     double precision :: U_inf = 1.d0
-    double precision :: rho,nu,Re !rho = 1.d0, nu=1.d-3
+    double precision :: rho,nu !rho = 1.d0, nu=1.d-3
 
     ! ===================================
     ! Velocity and pressures
@@ -420,12 +420,11 @@ program main
 
     !N_x=10  !Number of grid points in x-direction
     !N_y = 128   !Number of grid points in y-direction
-    L_x = 50 !Length of box in x-direction
-    L_y = 50  !Length of box in y-direction
+    L_x = 100 !Length of box in x-direction
+    L_y = 100  !Length of box in y-direction
 
 
-    maxIterNorm = MAX_ITERATIONS * Re
-    n_steps =maxIterNorm/50 !Interval that u,v and p are printed to UVP.dat
+    n_steps = MAX_ITERATIONS/100 !Interval that u,v and p are printed to UVP.dat
 
 
 
@@ -437,15 +436,15 @@ program main
     !!! Lagrangian Points
     HL_y = 3 !0.05 * L_y  ! Length of rect bluff y-direction
     HL_x = boxLen*HL_y ! Length of rect bluff in x-direction
-    H_xOffset = 0.35 * L_x ! how far along x before bluff starts, bluff will always be
+    H_xOffset = 0.5 * L_x ! how far along x before bluff starts, bluff will always be
                            ! centered in the domain.
-    h_l = 0.5*h ! spacing of lagrangian points
+    h_l = 0.25*h ! spacing of lagrangian points
     ! determine number of points in x and y directions
     nlx = HL_x / h_l
     nly = HL_y / h_l
     n_lagrangian_points = 2*nlx + 2*nly
-    !call setup_lagrangian_points()
-    call setup_lagrangian_points_circle()
+    call setup_lagrangian_points()
+    !call setup_lagrangian_points_circle()
     call output_lagrangian_points()
     call setup_subDomain()
     ! ===================================
@@ -459,9 +458,9 @@ program main
     ! Calculate matrix coefficients for Poisson solve
     a = 1.d0 / h**2
     forall (j=1:N_y)
-        b(j) = - (2.d0 / h**2 + y_center(j) / h**2 * (y_edge(j) + y_edge(j-1)))
-        cp(j) = (y_center(j) * y_edge(j)) / h**2
-        cm(j) = (y_center(j) * y_edge(j-1)) / h**2
+        b(j) = - (2.d0 / h**2 + y_center(j) / h**2 * (1.d0 + 1.d0))
+        cp(j) = (1.d0 * 1.d0) / h**2
+        cm(j) = (1.d0 * 1.d0) / h**2
     end forall
 
     ! Velocity and pressure arrays
@@ -491,7 +490,8 @@ program main
     nu = (U_inf*HL_y)/Re
     rho = 1.d0
     !dt =  CFL * h / 500.d0
-    dt = CFL * h / (Re * U_inf)
+    !dt = CFL * h / (Re * U_inf)
+    dt = CFL * h / (U_inf)
     t = 0.d0
     frame = 0
 
@@ -505,7 +505,7 @@ program main
 
     ! ===================================
     ! Main algorithm loop
-    do n=1,maxIterNorm
+    do n=1,MAX_ITERATIONS
         ! Store old step for convergence test
         u_old = u(1:N_x,1:N_y)
         v_old = v(1:N_x,1:N_y)
@@ -546,16 +546,16 @@ program main
             do i=1,N_x
                 ! Advective terms, see Lecture 4 notes, page 12
                 uu_x = (Flux_ux(i+1,j) - Flux_ux(i,j)) / h
-                uv_y = y_center(j) * (Flux_uy(i,j) - Flux_uy(i,j-1)) / h !
+                uv_y = 1.d0 * (Flux_uy(i,j) - Flux_uy(i,j-1)) / h !
 
                 uv_x = (Flux_uy(i,j) - Flux_uy(i-1,j)) / h
-                vv_y = y_edge(j) * (Flux_vy(i,j) - Flux_vy(i,j-1)) / h
+                vv_y = 1.d0 * (Flux_vy(i,j) - Flux_vy(i,j-1)) / h
 
                 ! Diffusive terms
                 u_xx = (u(i+1,j) - 2.d0*u(i,j) + u(i-1,j)) / (h**2)
-                u_yy = (y_center(j) / h**2) * (y_edge(j) * (u(i,j+1) - u(i,j)) - y_edge(j-1) * (u(i,j) - u(i,j-1))) !edge leads center by 0.5, verify by looking at poisson solver
+                u_yy = (1.d0 / h**2) * (1.d0 * (u(i,j+1) - u(i,j)) - 1.d0 * (u(i,j) - u(i,j-1))) !edge leads center by 0.5, verify by looking at poisson solver
                 v_xx = (v(i+1,j) - 2.d0*v(i,j) + v(i-1,j)) / (h**2)
-                v_yy = (y_edge(j) / h**2) * (y_center(j+1) * (v(i,j+1) - v(i,j)) - y_center(j) * (v(i,j) - v(i,j-1)))
+                v_yy = (1.d0 / h**2) * (1.d0 * (v(i,j+1) - v(i,j)) - 1.d0 * (v(i,j) - v(i,j-1)))
 
                 ! Update to u* and v* values
                 u_star(i,j) = u(i,j) + dt * (-(uu_x + uv_y) + nu*(u_xx + u_yy))
@@ -584,7 +584,7 @@ program main
 !                    yGrid = y_edge(j)
 !                    xLag = x_lag(k)
 !                    yLag = y_lag(k)
-!                    ustar_lagF(k) = ustar_lagF(k) + (-1.d0) * u_star(i,j) * delta_hxy(xGrid,yGrid,xLag,yLag)*h**2/dt
+!                    ustar_lagF(k) = ustar_lagF(k) + (-1.d0) * u_star(i,j) * delta_hxy(x_edge(i),y_center(j),xLag,yLag)*h**2/dt
 !                    vstar_lagF(k) = vstar_lagF(k) + (-1.d0) * v_star(i,j) * delta_hxy(xGrid,yGrid,xLag,yLag)*h**2/dt
 !                enddo
 !            enddo
@@ -607,7 +607,7 @@ program main
                     ! u xEdge yCenter
                     ! v xcenter yEdge
                     ustar_lagF(k) = ustar_lagF(k) + (-1.d0) * u_star(i,j) * delta_hxy(x_edge(i),y_center(j),xLag,yLag)*h**2/dt
-                    vstar_lagF(k) = vstar_lagF(k) + (-1.d0) * v_star(i,j) * delta_hxy(x_center(i),y_edge(i),xLag,yLag)*h**2/dt
+                    vstar_lagF(k) = vstar_lagF(k) + (-1.d0) * v_star(i,j) * delta_hxy(x_center(i),y_edge(j),xLag,yLag)*h**2/dt
 
                 enddo
             enddo
@@ -637,7 +637,7 @@ program main
                     xLag = x_lag(k)
                     yLag = y_lag(k)
                     u_star(i,j) = u_star(i,j) + ustar_lagF(k) * delta_hxy(x_edge(i),y_center(j),xLag,yLag)*h_l**2*dt
-                    v_star(i,j) = v_star(i,j) + vstar_lagF(k) * delta_hxy(x_center(i),y_edge(i),xLag,yLag)*h_l**2*dt
+                    v_star(i,j) = v_star(i,j) + vstar_lagF(k) * delta_hxy(x_center(i),y_edge(j),xLag,yLag)*h_l**2*dt
                 enddo
             enddo
         enddo
@@ -649,7 +649,7 @@ program main
         call bc(u_star,v_star,U_inf)
         forall(i=1:N_x,j=1:N_y)
             ! page 16 lecture 4 notes
-            Q(i,j) = 1.d0/dt * ((u_star(i,j)-u_star(i-1,j)) / h + (v_star(i,j)-v_star(i,j-1)) / h * y_center(j))
+            Q(i,j) = 1.d0/dt * ((u_star(i,j)-u_star(i-1,j)) / h + (v_star(i,j)-v_star(i,j-1)) / h * 1.d0)
         end forall
         ! Solve poisson problem
         call solve_poisson(p,Q,a,b,cm,cp)
@@ -660,7 +660,7 @@ program main
         forall (i=1:N_x,j=1:N_y)
             ! appears rho is 1.d0 from Q matrix
             u(i,j) = u_star(i,j) - dt * (p(i+1,j) - p(i,j)) / (rho*h)
-            v(i,j) = v_star(i,j) - dt * (p(i,j+1) - p(i,j)) * y_edge(j) / (rho*h)
+            v(i,j) = v_star(i,j) - dt * (p(i,j+1) - p(i,j)) * 1.d0 / (rho*h)
         end forall
 
     ! ===================================
@@ -772,7 +772,7 @@ subroutine bc(u,v,U_inf)
     !               |                               v(N_x+1,j) = 2 v(N_x,j) - v(N_x-1,j)
     !     + N_x,j   o N_x,j   + N_x+1,j  o N_x+1,j  p(N_x+1,j) = p(N_x,j)
     !               |
-    forall(j=1:N_y+1)
+    forall(j=0:N_y+1)
         ! TAs
         !u(0,j) = U_inf
         !v(0,j) = 0.d0
@@ -809,8 +809,8 @@ subroutine solve_poisson(P,Q,a,b,cm,cp)
 
     ! Solver parameters
     logical, parameter :: verbose = .false.
-    integer, parameter :: MAX_ITERATIONS = 10000
-    double precision, parameter :: TOLERANCE = 10.d-4
+    integer, parameter :: MAX_ITERATIONS = 100000
+    double precision, parameter :: TOLERANCE = 1.d-4
     double precision, parameter :: w = 1.6d0 ! 1 (GS) < w < 2
 
     ! Local variables
@@ -820,18 +820,7 @@ subroutine solve_poisson(P,Q,a,b,cm,cp)
     do n=1,MAX_ITERATIONS
         R = 0.d0
         ! Boundary conditions
-        forall (j=0:N_y+1) ! left and righ
-            ! TAs
-            !P(0,j) = P(1,j)
-            !P(N_x+1,j) = 0
 
-            ! given
-            P(0,j) = P(1,j)        ! Left
-            !P(N_x+1,j) = P(N_x,j)  ! Right
-
-            ! iman!
-            P(N_x+1,j) = P(N_x, j)
-        end forall
         forall (i=0:N_x+1) ! top and bottom
             !TAs
             !P(i,0) = P(i,1)
@@ -843,6 +832,19 @@ subroutine solve_poisson(P,Q,a,b,cm,cp)
             P(i,N_y+1) = 0.d0      ! Free stream
 
 
+        end forall
+
+        forall (j=0:N_y+1) ! left and righ
+            ! TAs
+            !P(0,j) = P(1,j)
+            !P(N_x+1,j) = 0
+
+            ! given
+            P(0,j) = P(1,j)        ! Left
+            !P(N_x+1,j) = P(N_x,j)  ! Right
+
+            ! iman!
+            P(N_x+1,j) = P(N_x, j)
         end forall
 
         do j=1,N_y
@@ -875,6 +877,19 @@ subroutine solve_poisson(P,Q,a,b,cm,cp)
         !print "(a,i6,a,e16.8)", "Solver converged in ",n," steps: R = ",R
         ! Boundary conditions
         ! Boundary conditions
+        forall (i=0:N_x+1) ! top and bottom
+            !TAs
+            !P(i,0) = P(i,1)
+            !P(i,N_y+1) = P(i,N_y)
+
+            ! given
+            !P(i,0) = P(i,1)        ! Bottom wall
+            P(i,0) = 0.d0          ! Free stream
+            P(i,N_y+1) = 0.d0      ! Free stream
+
+
+        end forall
+
         forall (j=0:N_y+1) ! left and righ
             ! TAs
             !P(0,j) = P(1,j)
@@ -887,27 +902,6 @@ subroutine solve_poisson(P,Q,a,b,cm,cp)
             ! iman!
             P(N_x+1,j) = P(N_x, j)
         end forall
-        forall (i=0:N_x+1) ! top and bottom
-            !TAs
-            !P(i,0) = P(i,1)
-            !P(i,N_y+1) = P(i,N_y)
-
-            ! given
-            !P(i,0) = P(i,1)        ! Bottom wall
-            P(i,0) = 0.d0          ! Free stream
-            P(i,N_y+1) = 0.d0      ! Free stream
-
-        end forall
-
-
-    !    forall (j=0:N_y+1)
-    !        P(0,j) = P(1,j)        ! Left
-    !        P(N_x+1,j) = P(N_x,j)  ! Right
-    !    end forall
-    !    forall (i=0:N_x+1)
-    !        P(i,0) = 0.d0        ! Free stream
-    !        P(i,N_y+1) = 0.d0      ! Free stream
-    !    end forall
     endif
 
 end subroutine solve_poisson
