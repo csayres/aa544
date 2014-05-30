@@ -190,8 +190,8 @@ class DataMuncher(object):
             tVector = self.tVector
         for i in range(len(tVector)):
             for j in ["u"]:#, "v", "p"]:
-                plotStr = j + " frame(%i) "%i + self.figSuffix
-                fig = plt.figure()
+                plotStr = j + " velocity" + " frame(%i) "%i + self.figSuffix
+                fig = plt.figure(figsize=(10, 5))
                 ax = fig.add_subplot(111,aspect="equal")
                 self.plotColorMap(i, j, figTitle=plotStr, fast=fast)
                 plt.savefig(saveDir+plotStr + '.png', format='png')
@@ -320,15 +320,16 @@ class elJefe(object):
         jefeList = []
         ii = 0
         for uvp, lag, resid, xf, yf in itertools.izip(uvpFiles,lagFiles,residFiles,xFiles,yFiles):
-            jefeList.append(
-                DataMuncher(
-                    uvpFile=uvp,
-                    lagFile = lag,
-                    xFile = xf,
-                    yFile = yf,
-                    residFile = resid
-                    )
+            dm = DataMuncher(
+                uvpFile=uvp,
+                lagFile = lag,
+                xFile = xf,
+                yFile = yf,
+                residFile = resid
                 )
+            dirName = "number %i "%ii + dm.figSuffix
+            os.mkdir(dirName)
+            dm.makeColorMaps(saveDir=dirName + "/")
             ii += 1
         self.jefeList = jefeList
 
@@ -340,7 +341,6 @@ class elJefe(object):
             dm = self.jefeList[ind]
             for jj, j in enumerate(["u", "v", "p"]):
                 plotStr = j
-                print 'number', plotnum
                 ax = fig.add_subplot(3, 3, plotnum, aspect="equal")
                 dm.plotColorMap(-1, j, figTitle=plotStr, fast=False)
                 plotnum += 1
@@ -356,8 +356,6 @@ class elJefe(object):
             dirName = base + str(int)
             os.mkdir(dirName)
             dm.makeColorMaps(saveDir=dirName+"/")
-            # next convert to pdf
-            allEps = glob.glob(dirName+"/*.eps")
 
 
 
@@ -387,8 +385,8 @@ if __name__ == "__main__":
     # x.makeColorMaps()
     # x.plotResidSemiLog("resid")
 
-    elJefe = elJefe("_output")
-    elJefe.jefeList[0].makeColorMaps(fast=False)
+    elJefe = elJefe("_output_mocha")
+    #elJefe.jefeList[0].makeColorMaps(fast=False)
     #elJefe.plotUVP_resArray()
     #elJefe.plotProfiles()
     #elJefe.dump2dirs("flow")
