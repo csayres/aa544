@@ -94,28 +94,63 @@ contains
         ! start lagrangian points at top left corner of
         ! rectangle and move clockwise
         ! define top left corner
-        x_lag(1) = x_front
+        x_lag(1) = x_front + h_l
         y_lag(1) = y_top
         do i=2,nlx
             x_lag(i) = x_lag(i-1) + h_l
             y_lag(i) = y_lag(1)
         enddo
         do i=nlx+1,nlx+nly
-            x_lag(i) = x_lag(nlx)
+            x_lag(i) = x_lag(nlx) + h_l
             y_lag(i) = y_lag(i-1) - h_l
         enddo
         do i = nlx+nly+1,nlx+nly+nlx
             x_lag(i) = x_lag(i-1) - h_l
-            y_lag(i) = y_lag(nlx+nly)
+            y_lag(i) = y_lag(nlx+nly) - h_l
         enddo
         do i=nlx+nly+nlx+1,nlx+nly+nlx+nly
-            x_lag(i) = x_lag(nlx+nly+nlx)
+            x_lag(i) = x_lag(nlx+nly+nlx) - h_l
             y_lag(i) = y_lag(i-1) + h_l
         enddo
 
         ! next for each lagrangian_points find the associated eulearian grid points (x and y separately)
 
     end subroutine setup_lagrangian_points
+
+    ! Setup and allocate all lagrangian points
+    subroutine setup_lagrangian_points_circle()
+
+        implicit none
+
+
+        !locals
+        double precision :: x_cent, y_cent, r
+        double precision :: y_top, y_bottom
+        integer :: i, running_i ! number of points in the x and y directions
+
+        !h_l = h/2 ! spacing between lagrangian points
+
+        ! determine number of points in x and y directions
+        !nlx = HL_x / h_l
+        !nly = HL_y / h_l
+
+        ! all lagrangian points
+        allocate(x_lag(1:(n_lagrangian_points)))
+        allocate(y_lag(1:(n_lagrangian_points)))
+
+        x_cent = H_xOffset + 0.5*HL_x ! x center
+        y_cent = 0.5 * L_y ! y center
+        r = 0.5*HL_y ! radius
+
+        do i=1,n_lagrangian_points
+            x_lag(i) = r*cos(i*1.d0/(n_lagrangian_points*1.d0)*2*3.14159) + x_cent
+            y_lag(i) = r*sin(i*1.d0/(n_lagrangian_points*1.d0)*2*3.14159) + y_cent
+        enddo
+
+
+        ! next for each lagrangian_points find the associated eulearian grid points (x and y separately)
+
+    end subroutine setup_lagrangian_points_circle
 
     subroutine output_lagrangian_points()
 
@@ -333,8 +368,8 @@ program main
 
     ! ====================================
     ! Solver parameters
-    integer, parameter :: MAX_ITERATIONS = 10000
-    double precision, parameter :: TOLERANCE = 1d-4, CFL = 0.002
+    integer, parameter :: MAX_ITERATIONS = 1000
+    double precision, parameter :: TOLERANCE = 1d-4, CFL = 0.02
     logical, parameter :: write_star = .false.
     integer :: n_steps
 
@@ -351,7 +386,7 @@ program main
     ! ===================================
     ! Locals
     character*20 :: arg
-    integer :: i,ii,j,jj,n,m,frame,i_R,j_R, k, boxLen
+    integer :: i,ii,j,jj,n,m,frame,i_R,j_R, k, boxLen, maxIterNorm
     double precision :: R,t,dt,a, lagFuSum, lagFvSum
     double precision, allocatable :: Flux_ux(:,:),Flux_uy(:,:),Flux_vy(:,:)
     double precision :: uu_x,uv_y,uv_x,vv_y,u_xx,u_yy,v_xx,v_yy
@@ -385,12 +420,12 @@ program main
 
     !N_x=10  !Number of grid points in x-direction
     !N_y = 128   !Number of grid points in y-direction
-    L_x = 40 !Length of box in x-direction
-    L_y = 40  !Length of box in y-direction
+    L_x = 50 !Length of box in x-direction
+    L_y = 50  !Length of box in y-direction
 
 
-
-    n_steps = MAX_ITERATIONS/50 !Interval that u,v and p are printed to UVP.dat
+    maxIterNorm = MAX_ITERATIONS * Re
+    n_steps =maxIterNorm/50 !Interval that u,v and p are printed to UVP.dat
 
 
 
@@ -400,16 +435,17 @@ program main
     call output_grid_centers()
 
     !!! Lagrangian Points
-    HL_y = 0.1 * L_y  ! Length of rect bluff y-direction
+    HL_y = 3 !0.05 * L_y  ! Length of rect bluff y-direction
     HL_x = boxLen*HL_y ! Length of rect bluff in x-direction
-    H_xOffset = 0.25 * L_x ! how far along x before bluff starts, bluff will always be
+    H_xOffset = 0.35 * L_x ! how far along x before bluff starts, bluff will always be
                            ! centered in the domain.
-    h_l = h ! spacing of lagrangian points
+    h_l = 0.5*h ! spacing of lagrangian points
     ! determine number of points in x and y directions
     nlx = HL_x / h_l
     nly = HL_y / h_l
     n_lagrangian_points = 2*nlx + 2*nly
-    call setup_lagrangian_points()
+    !call setup_lagrangian_points()
+    call setup_lagrangian_points_circle()
     call output_lagrangian_points()
     call setup_subDomain()
     ! ===================================
@@ -460,7 +496,6 @@ program main
     frame = 0
 
 
-
     ! Output inital condition
     call output_grid(frame,t,u,v,p)
     print "(a,i3,a,i4,a,e16.8)","Writing frame ",frame," during step n=",0," t=",t
@@ -470,7 +505,7 @@ program main
 
     ! ===================================
     ! Main algorithm loop
-    do n=1,MAX_ITERATIONS
+    do n=1,maxIterNorm
         ! Store old step for convergence test
         u_old = u(1:N_x,1:N_y)
         v_old = v(1:N_x,1:N_y)
@@ -566,12 +601,14 @@ program main
                     ! WARNING: use edge or centers???!!!!
                     i = x_euler_per_lag(k,ii)
                     j = y_euler_per_lag(k,jj)
-                    xGrid = x_edge(i)
-                    yGrid = y_edge(j)
+
                     xLag = x_lag(k)
                     yLag = y_lag(k)
-                    ustar_lagF(k) = ustar_lagF(k) + (-1.d0) * u_star(i,j) * delta_hxy(xGrid,yGrid,xLag,yLag)*h**2/dt
-                    vstar_lagF(k) = vstar_lagF(k) + (-1.d0) * v_star(i,j) * delta_hxy(xGrid,yGrid,xLag,yLag)*h**2/dt
+                    ! u xEdge yCenter
+                    ! v xcenter yEdge
+                    ustar_lagF(k) = ustar_lagF(k) + (-1.d0) * u_star(i,j) * delta_hxy(x_edge(i),y_center(j),xLag,yLag)*h**2/dt
+                    vstar_lagF(k) = vstar_lagF(k) + (-1.d0) * v_star(i,j) * delta_hxy(x_center(i),y_edge(i),xLag,yLag)*h**2/dt
+
                 enddo
             enddo
         enddo
@@ -597,12 +634,10 @@ program main
                     ! sum up forces acting on this point
                     i = x_euler_per_lag(k,ii)
                     j = y_euler_per_lag(k,jj)
-                    xGrid = x_edge(i)
-                    yGrid = y_edge(j)
                     xLag = x_lag(k)
                     yLag = y_lag(k)
-                    u_star(i,j) = u_star(i,j) + ustar_lagF(k) * delta_hxy(xGrid,yGrid,xLag,yLag)*h_l**2*dt
-                    v_star(i,j) = v_star(i,j) + vstar_lagF(k) * delta_hxy(xGrid,yGrid,xLag,yLag)*h_l**2*dt
+                    u_star(i,j) = u_star(i,j) + ustar_lagF(k) * delta_hxy(x_edge(i),y_center(j),xLag,yLag)*h_l**2*dt
+                    v_star(i,j) = v_star(i,j) + vstar_lagF(k) * delta_hxy(x_center(i),y_edge(i),xLag,yLag)*h_l**2*dt
                 enddo
             enddo
         enddo
@@ -737,7 +772,7 @@ subroutine bc(u,v,U_inf)
     !               |                               v(N_x+1,j) = 2 v(N_x,j) - v(N_x-1,j)
     !     + N_x,j   o N_x,j   + N_x+1,j  o N_x+1,j  p(N_x+1,j) = p(N_x,j)
     !               |
-    forall(j=0:N_y+1)
+    forall(j=1:N_y+1)
         ! TAs
         !u(0,j) = U_inf
         !v(0,j) = 0.d0

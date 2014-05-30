@@ -190,7 +190,7 @@ class DataMuncher(object):
         if not tVector:
             tVector = self.tVector
         for i in range(len(tVector)):
-            for j in ["u", "v", "p"]:
+            for j in ["u"]:#, "v", "p"]:
                 plotStr = j + " frame(%i) "%i + self.figSuffix
                 fig = plt.figure()
                 ax = fig.add_subplot(111,aspect="equal")
@@ -390,7 +390,6 @@ if __name__ == "__main__":
 
     elJefe = elJefe("_output")
     elJefe.jefeList[0].makeColorMaps(fast=False)
-    elJefe.jefeList[0].plotQuiver(-1, 'quiver')
     #elJefe.plotUVP_resArray()
     #elJefe.plotProfiles()
     #elJefe.dump2dirs("flow")
