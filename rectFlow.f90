@@ -86,8 +86,8 @@ contains
         allocate(x_lag(1:(n_lagrangian_points)))
         allocate(y_lag(1:(n_lagrangian_points)))
 
-        x_front = H_xOffset
-        x_back = H_xOffset + HL_x
+        x_front = H_xOffset - HL_x
+        x_back = H_xOffset
         y_top = 0.5 * L_y + 0.5 * HL_y
         y_bottom = 0.5 * L_y - 0.5 * HL_y
 
@@ -317,7 +317,7 @@ contains
 
         if (t==0) then
         open(unit=77,file='_output/force_grid.dat',access='sequential',status='unknown')
-        write(77,*) "Grid Size", N_y, N_x, "Reynolds = ", Re
+        write(77,*) "Grid Size", N_y, N_x, "Reynolds = ", Re, "height= ", HL_y, "width= ", HL_x
         write(77,*) ' VARIABLES= "x", "y", "u", "v"'
         write(77,100) t,N_X,N_Y
         endif
@@ -369,7 +369,7 @@ program main
     ! ====================================
     ! Solver parameters
     integer, parameter :: MAX_ITERATIONS = 10000
-    double precision, parameter :: TOLERANCE = 1d-4, CFL = 0.05
+    double precision, parameter :: TOLERANCE = 1d-4, CFL = 0.02
     logical, parameter :: write_star = .false.
     integer :: n_steps
 
@@ -434,9 +434,9 @@ program main
     call output_grid_centers()
 
     !!! Lagrangian Points
-    HL_y = 20 !0.05 * L_y  ! Length of rect bluff y-direction
+    HL_y = 10 !0.05 * L_y  ! Length of rect bluff y-direction
     HL_x = boxLen*HL_y ! Length of rect bluff in x-direction
-    H_xOffset = 0.3 * L_x ! how far along x before bluff starts, bluff will always be
+    H_xOffset = 0.5 * L_x ! how far along x before bluff starts, bluff will always be
                            ! centered in the domain.
     h_l = 0.25*h ! spacing of lagrangian points
     ! determine number of points in x and y directions
@@ -487,7 +487,8 @@ program main
     p = 0.d0
 
     !Re = 100.0
-    nu = (U_inf*HL_y)/Re
+    !nu = (U_inf*HL_y)/Re
+    nu = 1.d0/Re
     rho = 1.d0
     !dt =  CFL * h / 500.d0
     !dt = CFL * h / (Re * U_inf)
@@ -809,8 +810,8 @@ subroutine solve_poisson(P,Q,a,b,cm,cp)
 
     ! Solver parameters
     logical, parameter :: verbose = .false.
-    integer, parameter :: MAX_ITERATIONS = 100000
-    double precision, parameter :: TOLERANCE = 1.d-4
+    integer, parameter :: MAX_ITERATIONS = 10000
+    double precision, parameter :: TOLERANCE = 10.d-4
     double precision, parameter :: w = 1.6d0 ! 1 (GS) < w < 2
 
     ! Local variables
