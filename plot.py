@@ -327,7 +327,7 @@ class elJefe(object):
                 yFile = yf,
                 residFile = resid
                 )
-            dirName = "number %i "%ii + dm.figSuffix
+            dirName = "kknumber %i "%ii + dm.figSuffix
             os.mkdir(dirName)
             dm.makeColorMaps(saveDir=dirName + "/")
             ii += 1
@@ -385,7 +385,7 @@ if __name__ == "__main__":
     # x.makeColorMaps()
     # x.plotResidSemiLog("resid")
 
-    elJefe = elJefe("_output_mocha")
+    elJefe = elJefe("_output")
     #elJefe.jefeList[0].makeColorMaps(fast=False)
     #elJefe.plotUVP_resArray()
     #elJefe.plotProfiles()
