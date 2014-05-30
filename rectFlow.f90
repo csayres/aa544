@@ -272,7 +272,7 @@ contains
 
         if (t==0) then
         open(unit=70,file='_output/UVP_'//fileSuffix//'.dat',access='sequential',status='unknown')
-        write(70,*) "Grid Size", N_x, N_y
+        write(70,*) "Grid Size", N_x, N_y, "Reynolds = ", Re, "height= ", HL_y, "width= ", HL_x
         write(70,*) ' VARIABLES= "x", "y", "u", "v", "p"'
         write(70,100) t,N_X,N_Y
         endif
@@ -368,7 +368,7 @@ program main
 
     ! ====================================
     ! Solver parameters
-    integer, parameter :: MAX_ITERATIONS = 10000
+    integer, parameter :: MAX_ITERATIONS = 100000
     double precision, parameter :: TOLERANCE = 1d-4, CFL = 0.02
     logical, parameter :: write_star = .false.
     integer :: n_steps
@@ -420,11 +420,11 @@ program main
 
     !N_x=10  !Number of grid points in x-direction
     !N_y = 128   !Number of grid points in y-direction
-    L_x = 300 !Length of box in x-direction
+    L_x = 500 !Length of box in x-direction
     L_y = 300  !Length of box in y-direction
 
 
-    n_steps = MAX_ITERATIONS/50 !Interval that u,v and p are printed to UVP.dat
+    n_steps = MAX_ITERATIONS/500 !Interval that u,v and p are printed to UVP.dat
 
 
 
@@ -438,7 +438,7 @@ program main
     HL_x = boxLen*HL_y ! Length of rect bluff in x-direction
     H_xOffset = 0.5 * L_x ! how far along x before bluff starts, bluff will always be
                            ! centered in the domain.
-    h_l = 0.25*h ! spacing of lagrangian points
+    h_l = h ! spacing of lagrangian points
     ! determine number of points in x and y directions
     nlx = HL_x / h_l
     nly = HL_y / h_l
@@ -487,8 +487,8 @@ program main
     p = 0.d0
 
     !Re = 100.0
-    !nu = (U_inf*HL_y)/Re
-    nu = 1.d0/Re
+    nu = (U_inf*HL_y)/Re
+    !nu = 1.d0/Re
     rho = 1.d0
     !dt =  CFL * h / 500.d0
     !dt = CFL * h / (Re * U_inf)

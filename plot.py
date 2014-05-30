@@ -30,8 +30,7 @@ class DataMuncher(object):
         assert len(self.xPts)==self.gridsize[0]
         assert len(self.yPts)==self.gridsize[1]
         #boxLength = uvpFile.split("_")[-1].split(".")[0]
-        boxLength = int(numpy.max(self.lagPoints[:,1]) - numpy.min(self.lagPoints[:,1]) / (numpy.max(self.lagPoints[:,0]) - numpy.min(self.lagPoints[:,0])) )
-        self.figSuffix = "grid (%ix%i) box length (%s)" % (self.gridsize[0], self.gridsize[1], boxLength)
+        self.figSuffix = "grid (%ix%i) box aspect (%s) reynolds (%.2f)" % (self.gridsize[0], self.gridsize[1], self.bluffSize[1]/self.bluffSize[0], self.reynolds)
         self.uProfileIndex = bisect.bisect(self.xPts, numpy.max(self.lagPoints[:,1]))
         self.vProfileIndex = len(self.yPts)/2
         # get first true index
@@ -45,12 +44,13 @@ class DataMuncher(object):
         # keep the strin`g between the ""
         return float(line.split('"')[1].split()[-1])
 
-    def getGridSizeFromLine(self, line):
+    def parseHeader(self, line):
         """From a line determine the correct grid size
         """
-        gridsize = [int(x) for x in line.split() if x not in ("Grid", "Size")]
-        assert len(gridsize) == 2
-        return gridsize
+        splitted = line.split()
+        self.gridsize = [int(splitted[2]), int(splitted[3])]
+        self.reynolds = float(splitted[6])
+        self.bluffSize = [float(splitted[8]), float(splitted[10])]
 
     def resid2Mat(self, residualFile):
         """Convert an residual file (output from fortran code) into a 2D numpy matrix
@@ -102,7 +102,7 @@ class DataMuncher(object):
         outArray = [] # will be 3D (will hold an array of gridArrays)
         with open(uvpFile, 'r') as f:
             line1 = f.readline()
-            gridsize = self.getGridSizeFromLine(line1)
+            self.parseHeader(line1)
             line2 = f.readline() # ignored
             line3 = f.readline()
             tVector.append(self.getTimeFromLine(line3))
@@ -112,7 +112,7 @@ class DataMuncher(object):
                 line = f.readline()
                 if not line:
                     # end of file
-                    if len(uArray) == gridsize[0] * gridsize[1]:
+                    if len(uArray) == self.gridsize[0] * self.gridsize[1]:
                         print 'got all data!'
                         uOut.append(numpy.asarray(uArray, dtype=float))
                         vOut.append(numpy.asarray(vArray, dtype=float))
@@ -142,7 +142,6 @@ class DataMuncher(object):
                     vArray.append(lineArray[3])
                     pArray.append(lineArray[4])
         # return a numpy matrix
-        self.gridsize = gridsize
         self.tVector = tVector
         self.u = uOut
         self.v = vOut
