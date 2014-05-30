@@ -94,22 +94,22 @@ contains
         ! start lagrangian points at top left corner of
         ! rectangle and move clockwise
         ! define top left corner
-        x_lag(1) = x_front + h_l
+        x_lag(1) = x_front
         y_lag(1) = y_top
         do i=2,nlx
             x_lag(i) = x_lag(i-1) + h_l
             y_lag(i) = y_lag(1)
         enddo
         do i=nlx+1,nlx+nly
-            x_lag(i) = x_lag(nlx) + h_l
+            x_lag(i) = x_lag(nlx)
             y_lag(i) = y_lag(i-1) - h_l
         enddo
         do i = nlx+nly+1,nlx+nly+nlx
             x_lag(i) = x_lag(i-1) - h_l
-            y_lag(i) = y_lag(nlx+nly) - h_l
+            y_lag(i) = y_lag(nlx+nly)
         enddo
         do i=nlx+nly+nlx+1,nlx+nly+nlx+nly
-            x_lag(i) = x_lag(nlx+nly+nlx) - h_l
+            x_lag(i) = x_lag(nlx+nly+nlx)
             y_lag(i) = y_lag(i-1) + h_l
         enddo
 
@@ -369,7 +369,7 @@ program main
     ! ====================================
     ! Solver parameters
     integer, parameter :: MAX_ITERATIONS = 10000
-    double precision, parameter :: TOLERANCE = 1d-4, CFL = 0.02
+    double precision, parameter :: TOLERANCE = 1d-4, CFL = 0.05
     logical, parameter :: write_star = .false.
     integer :: n_steps
 
@@ -420,11 +420,11 @@ program main
 
     !N_x=10  !Number of grid points in x-direction
     !N_y = 128   !Number of grid points in y-direction
-    L_x = 100 !Length of box in x-direction
-    L_y = 100  !Length of box in y-direction
+    L_x = 300 !Length of box in x-direction
+    L_y = 300  !Length of box in y-direction
 
 
-    n_steps = MAX_ITERATIONS/100 !Interval that u,v and p are printed to UVP.dat
+    n_steps = MAX_ITERATIONS/50 !Interval that u,v and p are printed to UVP.dat
 
 
 
@@ -434,9 +434,9 @@ program main
     call output_grid_centers()
 
     !!! Lagrangian Points
-    HL_y = 3 !0.05 * L_y  ! Length of rect bluff y-direction
+    HL_y = 20 !0.05 * L_y  ! Length of rect bluff y-direction
     HL_x = boxLen*HL_y ! Length of rect bluff in x-direction
-    H_xOffset = 0.5 * L_x ! how far along x before bluff starts, bluff will always be
+    H_xOffset = 0.3 * L_x ! how far along x before bluff starts, bluff will always be
                            ! centered in the domain.
     h_l = 0.25*h ! spacing of lagrangian points
     ! determine number of points in x and y directions
