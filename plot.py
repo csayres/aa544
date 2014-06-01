@@ -3,12 +3,14 @@ import numpy
 import itertools
 import time
 import scipy.interpolate
+import numpy.fft
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.mlab as ml
 import glob
 import os
 import bisect
+import cPickle as pickle
 
 # from matplotlib import rc
 # rc('text', usetex=True)
@@ -22,18 +24,194 @@ class DataMuncher(object):
         @param[in] lagFile: string, path to file containing lagrangian point poisions
         @param[in] forceFile: string, path to [uvpFile].dat, output from fortran routine
         """
-        self.uvpFile2Mat(uvpFile)
-        self.lagPoints = self.lagFile2Mat(lagFile)
-        self.xPts = numpy.loadtxt(xFile)
-        self.yPts = numpy.loadtxt(yFile)
+        self.strouhalBox = (270,280,100,200)
+        self._tVector = None
+        self._u = None
+        self._v = None
+        self._p = None
+        self._x = None
+        self._y = None
+        self._st = None # strohl number effectively frequency
+        self.uvpFile = uvpFile
+        self.parseHeader(uvpFile)
+        self.figSuffix = "grid (%ix%i) box aspect (%s) reynolds (%.2f)" % (self.gridsize[0], self.gridsize[1], self.bluffDim[1]/self.bluffDim[0], self.re)
+        # self.uvpFile2Mat(uvpFile)
+        self.lagPoints = self.lagFile2Mat(lagFile) + 1.5
+        self.xPts = numpy.loadtxt(xFile) + 1.5
+        self.yPts = numpy.loadtxt(yFile) + 1.5
         self.residMat = self.resid2Mat(residFile)
         assert len(self.xPts)==self.gridsize[0]
         assert len(self.yPts)==self.gridsize[1]
         #boxLength = uvpFile.split("_")[-1].split(".")[0]
-        self.figSuffix = "grid (%ix%i) box aspect (%s) reynolds (%.2f)" % (self.gridsize[0], self.gridsize[1], self.bluffSize[1]/self.bluffSize[0], self.reynolds)
         self.uProfileIndex = bisect.bisect(self.xPts, numpy.max(self.lagPoints[:,1]))
         self.vProfileIndex = len(self.yPts)/2
         # get first true index
+
+    def saveToPickle(self):
+        pickleDict = {
+            "_tVector": self._tVector,
+            "_u": self._u,
+            "_v": self._v,
+            "_p": self._p,
+            "_x": self._x,
+            "_y": self._y,
+        }
+        output = open(self.figSuffix + ".pk", "wb")
+        pickle.dump(pickleDict, output)
+        output.close()
+
+    def loadFromPickle(self):
+            pkFile = open("./"+self.figSuffix + ".pk", "rb")
+            pickleDict = pickle.load(pkFile)
+            pkFile.close()
+            self._tVector = pickleDict["_tVector"]
+            self._u = pickleDict["_u"]
+            self._v = pickleDict["_v"]
+            self._p = pickleDict["_p"]
+            self._x = pickleDict["_x"]
+            self._y = pickleDict["_y"]
+            print 'loaded from pickle'
+
+    def tryOrLoad(self):
+        try:
+            self.loadFromPickle()
+        except:
+            print "picklefile not found"
+            self.uvpFile2Mat(self.uvpFile)
+            self.saveToPickle()
+
+    @property
+    def tVector(self):
+        if not self._tVector:
+            self.tryOrLoad()
+        return self._tVector
+
+    @property
+    def u(self):
+        if not self._u:
+            self.tryOrLoad()
+        return self._u
+
+    @property
+    def v(self):
+        if not self._v:
+            self.tryOrLoad()
+        return self._v
+
+    @property
+    def p(self):
+        if not self._p:
+            self.tryOrLoad()
+        return self._p
+
+    @property
+    def x(self):
+        if not self._x:
+            self.tryOrLoad()
+        return self._x
+
+    @property
+    def y(self):
+        if not self._y:
+            self.tryOrLoad()
+        return self._y
+
+    def getFFTSumAndFreq(self):
+        xMin = self.strouhalBox[0]
+        xMax = self.strouhalBox[1]
+        yMin = self.strouhalBox[2]
+        yMax = self.strouhalBox[3]
+        xIndMin = numpy.argmin(numpy.abs(xMin-self.xPts))
+        xIndMax = numpy.argmin(numpy.abs(xMax-self.xPts))
+        xInds = range(xIndMin, xIndMax)
+        yIndMax = numpy.argmin(numpy.abs(yMax-self.yPts))
+        yIndMin = numpy.argmin(numpy.abs(yMin-self.yPts))
+        yInds = range(yIndMin,yIndMax)
+
+        # FFT stuff
+        N = len(self.tVector)
+        dt = self.tVector[1]
+        #freq = numpy.linspace(0.0, N/2, N/2)
+        freq = numpy.linspace(0.0, 1.0/(2.0*dt), N/2)
+        # ft = numpy.zeros(freq.shape, dtype="complex")
+        ft = numpy.zeros(freq.shape, dtype=float)
+        mid_ii = len(xInds)*len(yInds)//2
+        ii = 0
+        for i in xInds:
+            for j in yInds:
+
+                flatInd = j*len(self.xPts)+i
+                timeSeries = numpy.asarray([x[flatInd] for x in self.u])
+                if ii == mid_ii:
+                    ts = timeSeries
+                # _ft = numpy.fft.fft(timeSeries)[0:N/2]
+                # ft = ft + _ft*numpy.conj(_ft)
+                ft = ft + numpy.abs(numpy.fft.fft(timeSeries)[0:N/2])
+                ii += 1
+        # set strohl number
+        trimmedFt = ft[2:]
+        trimmedFreq = freq[2:]
+        self._st = trimmedFreq[numpy.argmax(trimmedFt)]*self.bluffDim[0]
+        return freq, ft, ts
+
+    @property
+    def st(self):
+        if not self._st:
+            self.getFFTSumAndFreq()
+        return self._st
+
+    # def getTimeseries(self, u_v_or_p, xLoc, yLoc):
+    #     # find closest index to xLoc, yLoc
+    #     xInd = numpy.argmin(numpy.abs(xLoc-self.xPts))
+    #     yInd = numpy.argmin(numpy.abs(yLoc-self.yPts))
+    #     # find index in _p array corresponding to xInd, yInd
+    #     flatInd = yInd*len(self.xPts)+xInd
+    #     return numpy.asarray([x[flatInd] for x in getattr(self, u_v_or_p)])
+
+    # def getFFTAndFreq(self, dt, timeSeries):
+    #     N = len(timeSeries)
+    #     ft = (numpy.fft.fft(timeSeries)[0:N/2])**2
+    #     freq = numpy.linspace(0.0, 1.0/(2.0*dt), N/2)
+    #     # freq = numpy.fft.fftfreq(len(timeSeries), d=dt)
+    #     return freq, ft
+
+    def plotFFTSum(self):
+        freq, ft, ts = self.getFFTSumAndFreq()
+        fig = plt.figure(figsize=(10,10))
+        ax = fig.add_subplot(211)
+        tv = numpy.asarray(self.tVector)
+        ax.set_xlabel("time")
+        ax.set_ylabel("pressure")
+        plt.plot(tv, ts, "k")
+
+        ax = fig.add_subplot(212)
+        plt.plot(freq[1:], ft[1:], "k")
+        puthere=numpy.argmax(ft[1:])
+        ax.text(freq[puthere] + .002, 0.95*numpy.max(ft[1:]), 'St = %.2f'%self.st)
+        ax.set_xlabel("frequency")
+        ax.set_ylabel("power")
+
+        plt.savefig(self.figSuffix + ' fftsum.png', format='png')
+        plt.close()
+
+    # def plotTimeseries(self, u_v_or_p, xLoc, yLoc, figNum):
+    #     fig = plt.figure()
+    #     ax = fig.add_subplot(211)
+    #     x = self.getTimeseries(u_v_or_p, xLoc, yLoc)
+    #     plt.plot(self._tVector, x, ".k")
+
+    #     ax = fig.add_subplot(212)
+    #     # print self._tVector[0], self._tVector[1]
+    #     dt = self.tVector[1]
+    #     freq, ft = self.getFFTAndFreq(dt, x)
+    #     plt.plot(freq, ft, ".k")
+
+    #     plt.savefig('timeseries_%i.png'%figNum, format='png')
+    #     plt.close()
+
+    def sumFFT(self, xLoc, yRange):
+        pass
+
 
     def getTimeFromLine(self, line):
         """@param[in] line from uvpFile containing a new time point
@@ -44,13 +222,16 @@ class DataMuncher(object):
         # keep the strin`g between the ""
         return float(line.split('"')[1].split()[-1])
 
-    def parseHeader(self, line):
+    def parseHeader(self, uvpFile):
         """From a line determine the correct grid size
         """
+        with open(uvpFile, 'r') as f:
+            line = f.readline()
         splitted = line.split()
         self.gridsize = [int(splitted[2]), int(splitted[3])]
-        self.reynolds = float(splitted[6])
-        self.bluffSize = [float(splitted[8]), float(splitted[10])]
+        self.re = float(splitted[6])
+        self.bluffDim = [float(splitted[8]), float(splitted[10])]
+        self.aspectRatio = self.bluffDim[1] / self.bluffDim[0]
 
     def resid2Mat(self, residualFile):
         """Convert an residual file (output from fortran code) into a 2D numpy matrix
@@ -102,7 +283,6 @@ class DataMuncher(object):
         outArray = [] # will be 3D (will hold an array of gridArrays)
         with open(uvpFile, 'r') as f:
             line1 = f.readline()
-            self.parseHeader(line1)
             line2 = f.readline() # ignored
             line3 = f.readline()
             tVector.append(self.getTimeFromLine(line3))
@@ -142,12 +322,13 @@ class DataMuncher(object):
                     vArray.append(lineArray[3])
                     pArray.append(lineArray[4])
         # return a numpy matrix
-        self.tVector = tVector
-        self.u = uOut
-        self.v = vOut
-        self.p = pOut
-        self.x = xArray
-        self.y = yArray
+        self._tVector = tVector
+        self._u = uOut
+        self._v = vOut
+        self._p = pOut
+        self._x = xArray
+        self._y = yArray
+        print 'loaded from uvp file'
 
     def reshapeZ(self, Z):
         Z = numpy.reshape(Z, (self.gridsize[0],self.gridsize[1]), order="F")
@@ -183,21 +364,32 @@ class DataMuncher(object):
         plt.savefig('velocityprofiles.pdf', format='pdf')
         plt.close()
 
+    # def makeColorMaps(self, fast=True, tVector=None, saveDir=""):
+    #     if not tVector:
+    #         tVector = self.tVector
+    #     for i in range(len(tVector)):
+    #         for j in ["u"]:#, "v", "p"]:
+    #             plotStr = j + " velocity" + " frame(%i) "%i + self.figSuffix
+    #             fig = plt.figure(figsize=(10, 5))
+    #             ax = fig.add_subplot(111,aspect="equal")
+    #             lims = (-.1, .1)
+    #             self.plotColorMap(i, j, figTitle=plotStr, fast=fast, lims=lims)
+    #             plt.savefig(saveDir+plotStr + '.png', format='png')
+    #             plt.close()
+
+    def crop(self, data):
+        ds = data.shape
+        xMin = 150.
+        yMin = 100.
+        yMax = 200.
+        xIndMin = numpy.argmin(numpy.abs(xMin-self.xPts))
+        yIndMax = numpy.argmin(numpy.abs(yMax-self.yPts))
+        yIndMin = numpy.argmin(numpy.abs(yMin-self.yPts))
 
 
-    def makeColorMaps(self, fast=True, tVector=None, saveDir=""):
-        if not tVector:
-            tVector = self.tVector
-        for i in range(len(tVector)):
-            for j in ["u"]:#, "v", "p"]:
-                plotStr = j + " velocity" + " frame(%i) "%i + self.figSuffix
-                fig = plt.figure(figsize=(10, 5))
-                ax = fig.add_subplot(111,aspect="equal")
-                self.plotColorMap(i, j, figTitle=plotStr, fast=fast)
-                plt.savefig(saveDir+plotStr + '.png', format='png')
-                plt.close()
+        return data[yIndMin:yIndMax, xIndMin:]
 
-    def plotColorMap(self, timeStep, u_v_or_p, figTitle="", fast=True):
+    def plotColorMap(self, timeStep, u_v_or_p, figTitle="", fast=True, lims=(None, None), zoom=False):
         """Plot a 2D color contour
 
         @param[in] int, timeStep to use (-1 is last time step)
@@ -205,6 +397,8 @@ class DataMuncher(object):
         @param[in] figName: name of the figure
         @param[in] figTitle: title for the figure
         """
+        vmin=lims[0]
+        vmax=lims[1]
 
         # grab the 2D matrix to plot
         plt.hold(True)
@@ -217,25 +411,31 @@ class DataMuncher(object):
         # yi = numpy.linspace(min(y), max(y), 2000)
 
         cmap = plt.get_cmap('winter')
+        #cmap = plt.get_cmap('hot')
 
         # X, Y = numpy.meshgrid(xi, yi)
         # X, Y = numpy.meshgrid(x,y)
         # Z = ml.griddata(x, y, z, xi, yi)
         if fast:
             z = self.getUVorP(u_v_or_p, timeStep)
-            Z = self.reshapeZ(z)
-
-            plt.imshow(Z.T, vmin=-0.5, vmax=1.5)
+            Z = self.reshapeZ(z).T
+            if zoom:
+                Z = self.crop(Z)
+            plt.imshow(Z, vmin=vmin, vmax=vmax)
         else:
             X,Y,Z = self.getGridData(timeStep, u_v_or_p)
             # Z = scipy.interpolate.griddata(x,y,z,(xi,yi))
-
+            Z = Z.T
+            if zoom:
+                X = self.crop(X)
+                Y = self.crop(Y)
+                Z = self.crop(Z)
             # X, Y = numpy.meshgrid(x, y)
             # z = numpy.sin(X)
             # note
-            # plt.contourf(X, Y, Z, cmap=cmap, vmin=-0.5, vmax=1.5)#, norm=norm)
+            # plt.contourf(X, Y, Z, cmap=cmap, vmin=vmin, vmax=vmax)#, norm=norm)
             # plt.imshow(Z.T, cmap=cmap, vmin=-.5, vmax=1.5)
-            plt.pcolormesh(X, Y, Z.T, vmin=-0.5, vmax=1.5)#, cmap=cmap)#, norm=norm)
+            plt.pcolormesh(X, Y, Z, cmap=cmap, vmin=vmin, vmax=vmax, norm=None)#, cmap=cmap)#, norm=norm)
             # img = plot.imshow()
             self.plotLagPoints()
 
@@ -254,8 +454,8 @@ class DataMuncher(object):
             plt.show()
 
     def plotLagPoints(self):
-        plt.plot(self.lagPoints[:,0], self.lagPoints[:,1], ".k-", alpha=0.5)
-
+        # pressure plots require an offset
+        plt.plot(self.lagPoints[:,0], self.lagPoints[:,1], ".k-", alpha=0.8)
 
     def plotAll(self, timestep):
         fig = plt.figure();
@@ -280,14 +480,6 @@ def createDataMuncher(gridsize, boxLength):
         yFile="_output/y_points%s_%i.dat"%(gs, boxLength),
         residFile="_output/residual_%s_%i.dat"%(gs, boxLength),
         )
-
-def makeDataMunchDict(gridsizes, boxLengths):
-    outDict = {}
-    for gridsize in strgs:
-        outDict[str(gridsize)] = {}
-        for boxLength in boxLengths:
-            outDict[str(gridsize)][str(boxLength)] = createDataMuncher(gridsize, boxLength)
-    return outDict
 
 class elJefe(object):
     """Object for managing / plotting all runs!
@@ -318,7 +510,6 @@ class elJefe(object):
         yFiles.sort()
         lagFiles.sort()
         jefeList = []
-        ii = 0
         for uvp, lag, resid, xf, yf in itertools.izip(uvpFiles,lagFiles,residFiles,xFiles,yFiles):
             dm = DataMuncher(
                 uvpFile=uvp,
@@ -327,11 +518,14 @@ class elJefe(object):
                 yFile = yf,
                 residFile = resid
                 )
-            dirName = "kknumber %i "%ii + dm.figSuffix
-            os.mkdir(dirName)
-            dm.makeColorMaps(saveDir=dirName + "/")
-            ii += 1
+            jefeList.append(dm)
         self.jefeList = jefeList
+        self.lims = {
+            "u": (-.5, 1.5),
+            "v": (-.5, 1.5),
+            "p": (-0.05, 0.05),
+
+        }
 
     def plotUVP_resArray(self):
         inds = [22,4,7]
@@ -357,8 +551,67 @@ class elJefe(object):
             os.mkdir(dirName)
             dm.makeColorMaps(saveDir=dirName+"/")
 
+    def makeColorMaps(self, dm, j, fast=True, tVector=None, saveDir="", zoom=False, short=False):
+        if not tVector:
+            tVector = dm.tVector
+            if short:
+                tVector = tVector[:len(tVector)//3]
+        for i in range(len(tVector)):
+            plotStr = j + " frame(%i) "%i + dm.figSuffix
+            fig = plt.figure(figsize=(10, 5))
+            ax = fig.add_subplot(111,aspect="equal")
+            dm.plotColorMap(i, j, figTitle=plotStr, fast=fast, lims=self.lims[j], zoom=zoom)
+            plt.savefig(saveDir+plotStr + '.png', format='png')
+            plt.close()
+
+    def plotDetector(self, dm, j, xMin, xMax, yMin, yMax, fast=True, tVector=None, saveDir="", zoom=False):
+            plotStr = j + " detector region" + dm.figSuffix
+            fig = plt.figure(figsize=(10, 5))
+            ax = fig.add_subplot(111,aspect="equal")
+            dm.plotColorMap(-1, j, figTitle=plotStr, fast=fast, lims=self.lims[j], zoom=zoom)
+            box = numpy.asarray([
+                [xMin, yMax],
+                [xMax, yMax],
+                [xMax, yMin],
+                [xMin, yMin],
+                [xMin, yMax],
+            ])
+            plt.plot(box[:,0], box[:,1], 'k')
+            plt.savefig(saveDir+plotStr + '.png', format='png')
+            plt.close()
+
+    def movieReynoldsSweep(self, reRange, aspectRatio, u_v_or_p):
+        dms = []
+        dmsPrelim  = self.filterDataMunchers(aspectRatio=aspectRatio)
+        # throw out those outside of reRange
+        for dm in dmsPrelim:
+            if dm.re in reRange:
+                dms.append(dm)
+        fig = plt.figure()
+        nPanels = len(dms)
+        for t in range(len(dms[0].tVector)):
+            for i, dm in enumerate(dms):
+                ax = fig.add_subplot(nPanels, 1, i, aspect="equal")
+                figTitle = "Aspect (%i) Reynolds (%.2f)" % (dm.aspectRatio, dm.re)
+                dm.plotColorMap(t, u_v_or_p, figTitle=figTitle, fast=False, lims=self.lims[u_v_or_p], zoom=False)
+        plt.savefig("reSweep_%i.png"%t, format="png")
+        plt.close()
 
 
+    def filterDataMunchers(self, gridsize=None, re=None, aspectRatio=None):
+        outList = []
+        for dm in self.jefeList:
+            if gridsize:
+                if tuple(dm.gridsize) != tuple(gridsize):
+                    continue
+            if re:
+                if dm.re != re:
+                    continue
+            if aspectRatio:
+                if dm.aspectRatio != aspectRatio:
+                    continue
+            outList.append(dm)
+        return outList[0] if len(outList)==1 else outList
 
 
 def cleanUpDir(d):
@@ -385,9 +638,19 @@ if __name__ == "__main__":
     # x.makeColorMaps()
     # x.plotResidSemiLog("resid")
 
-    elJefe = elJefe("_output")
-    #elJefe.jefeList[0].makeColorMaps(fast=False)
-    #elJefe.plotUVP_resArray()
+    elJefe = elJefe("/Volumes/Boof/AA/_output_lowres")
+    elJefe.movieReynoldsSweep(reRange=[70, 100, 125, 150, 175, 200, 300], aspectRatio=2, u_v_or_p="u")
+    #for dm in elJefe.jefeList:
+    #dm = elJefe.filterDataMunchers(re=150, aspectRatio=1)
+    # dm.plotTimeseries(150, 270, 1)
+    # dm.plotTimeseries(155, 270, 2)
+    # dm.plotTimeseries(160, 270, 3)
+    # dm.plotTimeseries(165, 270, 4)
+    # dm.plotTimeseries(170, 270, 5)
+    # dm.plotTimeseries(175, 270, 6)
+    # dm.plotFFTSum()
+    # dm.plotTimeseries("p", 270, 160, 1)
+    #elJefe.plotDetector(dm, "p", 270,280,150,180, fast=False, zoom=True)
+   # elJefe.makeColorMaps(dm, j="p", fast=False, zoom=True, short=False)
     #elJefe.plotProfiles()
-    #elJefe.dump2dirs("flow")
-
+    #elJefe.dump2dirs("flow"), 1
