@@ -368,7 +368,7 @@ program main
 
     ! ====================================
     ! Solver parameters
-    integer, parameter :: MAX_ITERATIONS = 1000
+    integer, parameter :: MAX_ITERATIONS = 10000
     double precision, parameter :: TOLERANCE = 1d-4, CFL = 0.02
     logical, parameter :: write_star = .false.
     integer :: n_steps
@@ -420,11 +420,11 @@ program main
 
     !N_x=10  !Number of grid points in x-direction
     !N_y = 128   !Number of grid points in y-direction
-    L_x = 500 !Length of box in x-direction
+    L_x = 300 !Length of box in x-direction
     L_y = 300  !Length of box in y-direction
 
 
-    n_steps = 10 !MAX_ITERATIONS/100 !Interval that u,v and p are printed to UVP.dat
+    n_steps = MAX_ITERATIONS/100 !Interval that u,v and p are printed to UVP.dat
 
 
 
@@ -774,14 +774,14 @@ subroutine solve_poisson(P,Q,a,b,cm,cp)
         forall (j=0:N_y+1) ! left and righ
             ! TAs
             !P(0,j) = P(1,j)
-            !P(N_x+1,j) = 0
+            P(N_x+1,j) = 0
 
             ! given
             P(0,j) = P(1,j)        ! Left
             !P(N_x+1,j) = P(N_x,j)  ! Right
 
             ! iman!
-            P(N_x+1,j) = P(N_x, j)
+            !P(N_x+1,j) = P(N_x, j)
         end forall
 
         do j=1,N_y
@@ -832,14 +832,14 @@ subroutine solve_poisson(P,Q,a,b,cm,cp)
         forall (j=0:N_y+1) ! left and righ
             ! TAs
             !P(0,j) = P(1,j)
-            !P(N_x+1,j) = 0
+            P(N_x+1,j) = 0
 
             ! given
             P(0,j) = P(1,j)        ! Left
             !P(N_x+1,j) = P(N_x,j)  ! Right
 
             ! iman!
-            P(N_x+1,j) = P(N_x, j)
+            !P(N_x+1,j) = P(N_x, j)
         end forall
     endif
 
