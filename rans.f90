@@ -16,7 +16,7 @@ module grid_module
     implicit none
 
     ! Grid parameters
-    integer :: N_y , N_x, nlx, nly, n_lagrangian_points
+    integer :: N_y , N_x, N_leadIn, nlx, nly, n_lagrangian_points
     double precision :: L_x, h, L_y, HL_y, HL_x, H_xOffset, h_l, Re
     character*20 :: fileSuffix
 
@@ -368,7 +368,7 @@ program main
 
     ! ====================================
     ! Solver parameters
-    integer, parameter :: MAX_ITERATIONS = 100
+    integer, parameter :: MAX_ITERATIONS = 1000
     double precision, parameter :: TOLERANCE = 1d-4, CFL = 0.02
     logical, parameter :: write_star = .false.
     integer :: n_steps
@@ -424,7 +424,7 @@ program main
     L_y = 300  !Length of box in y-direction
 
 
-    n_steps = 10!MAX_ITERATIONS/500 !Interval that u,v and p are printed to UVP.dat
+    n_steps = 10 !MAX_ITERATIONS/100 !Interval that u,v and p are printed to UVP.dat
 
 
 
@@ -447,6 +447,7 @@ program main
     call setup_lagrangian_points_circle()
     call output_lagrangian_points()
     call setup_subDomain()
+    N_leadIn = N_x / 25
     ! ===================================
 
     allocate(Flux_ux(1:N_x+1,0:N_y+1))
@@ -571,79 +572,6 @@ program main
             call output_grid(frame,t,u_star,v_star,p)
         endif
     !===================================
-        ! compute u* and v* forcing at lagrangian points
-!        do k=1,n_lagrangian_points
-!            ! loop over whole domain (could likely just do a subset to speed up later)
-!            ! initialize to zero
-!            ustar_lagF(k) = 0.d0
-!            vstar_lagF(k) = 0.d0
-!            do j=1,N_y
-!                do i=1,N_x
-!                    ! convenience variables
-!                    ! WARNING: use edge or centers???!!!!
-!                    xGrid = x_edge(i)
-!                    yGrid = y_edge(j)
-!                    xLag = x_lag(k)
-!                    yLag = y_lag(k)
-!                    ustar_lagF(k) = ustar_lagF(k) + (-1.d0) * u_star(i,j) * delta_hxy(x_edge(i),y_center(j),xLag,yLag)*h**2/dt
-!                    vstar_lagF(k) = vstar_lagF(k) + (-1.d0) * v_star(i,j) * delta_hxy(xGrid,yGrid,xLag,yLag)*h**2/dt
-!                enddo
-!            enddo
-!        enddo
-
-!        do k=1,n_lagrangian_points
-!            ! loop over sub domain only points near the lagrangians
-!            ! initialize to zero
-!            ustar_lagF(k) = 0.d0
-!            vstar_lagF(k) = 0.d0
-!            do jj=1,5
-!                do ii=1,5
-!                    ! convenience variables
-!                    ! WARNING: use edge or centers???!!!!
-!                    i = x_euler_per_lag(k,ii)
-!                    j = y_euler_per_lag(k,jj)
-!
-!                    xLag = x_lag(k)
-!                    yLag = y_lag(k)
-!                    ! u xEdge yCenter
-!                    ! v xcenter yEdge
-!                    ustar_lagF(k) = ustar_lagF(k) + (-1.d0) * u_star(i,j) * delta_hxy(x_edge(i),y_center(j),xLag,yLag)*h**2/dt
-!                    vstar_lagF(k) = vstar_lagF(k) + (-1.d0) * v_star(i,j) * delta_hxy(x_center(i),y_edge(j),xLag,yLag)*h**2/dt
-!
-!                enddo
-!            enddo
-!        enddo
-
-        ! calcluate the force grid (could be combined with the next step, but I wanna look at the force grid)
-!        do j=1,N_y
-!            do i=1,N_x
-!                do k=1,n_lagrangian_points
-!                    ! sum up forces acting on this point
-!                    xGrid = x_edge(i)
-!                    yGrid = y_edge(j)
-!                    xLag = x_lag(k)
-!                    yLag = y_lag(k)
-!                    u_star(i,j) = u_star(i,j) + ustar_lagF(k) * delta_hxy(xGrid,yGrid,xLag,yLag)*h_l**2*dt
-!                    v_star(i,j) = v_star(i,j) + vstar_lagF(k) * delta_hxy(xGrid,yGrid,xLag,yLag)*h_l**2*dt
-!                enddo
-!            enddo
-!        enddo
-
-!        do jj=1,5
-!            do ii=1,5
-!                do k=1,n_lagrangian_points
-!                    ! sum up forces acting on this point
-!                    i = x_euler_per_lag(k,ii)
-!                    j = y_euler_per_lag(k,jj)
-!                    xLag = x_lag(k)
-!                    yLag = y_lag(k)
-!                    u_star(i,j) = u_star(i,j) + ustar_lagF(k) * delta_hxy(x_edge(i),y_center(j),xLag,yLag)*h_l**2*dt
-!                    v_star(i,j) = v_star(i,j) + vstar_lagF(k) * delta_hxy(x_center(i),y_edge(j),xLag,yLag)*h_l**2*dt
-!                enddo
-!            enddo
-!        enddo
-
-        !call output_force_grid(frame,t,u_star,v_star)
 
     ! ===================================
         ! Solve projection poisson problem
@@ -756,13 +684,19 @@ subroutine bc(u,v,U_inf)
         !v(i,0) = v(i,1)
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        u(i,0) = u(i,1)
-        v(i,0) = v(i,1)
+        !u(i,0) = u(i,1)
+        !v(i,0) = v(i,1)
+        u(i,0) = -u(i,1)
+        v(i,0) = 0.d0
         u(i,N_y+1) = u(i,N_y)
         v(i,N_y+1) = v(i,N_y)
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     end forall
+ !   forall(i=0:N_leadIn)
+ !       u(i,0) = u(i,1)
+ !       v(i,0) = v(i,1)
+ !   end forall
     ! Left Boundaries
     !   x 0,j  |      x 1,j
     !  0,j     |                        u(0,j) = U_inf
@@ -811,7 +745,7 @@ subroutine solve_poisson(P,Q,a,b,cm,cp)
     ! Solver parameters
     logical, parameter :: verbose = .false.
     integer, parameter :: MAX_ITERATIONS = 10000
-    double precision, parameter :: TOLERANCE = 10.d-4
+    double precision, parameter :: TOLERANCE = 100.d-4
     double precision, parameter :: w = 1.6d0 ! 1 (GS) < w < 2
 
     ! Local variables
@@ -828,13 +762,15 @@ subroutine solve_poisson(P,Q,a,b,cm,cp)
             !P(i,N_y+1) = P(i,N_y)
 
             ! given
-            !P(i,0) = P(i,1)        ! Bottom wall
-            P(i,0) = 0.d0          ! Free stream
+            P(i,0) = P(i,1)        ! Bottom wall
+            !P(i,0) = 0.d0          ! Free stream
             P(i,N_y+1) = 0.d0      ! Free stream
 
 
         end forall
-
+    !    forall(i=0:N_leadIn)
+    !        P(i,0) = 0.d0
+    !    end forall
         forall (j=0:N_y+1) ! left and righ
             ! TAs
             !P(0,j) = P(1,j)
@@ -884,13 +820,15 @@ subroutine solve_poisson(P,Q,a,b,cm,cp)
             !P(i,N_y+1) = P(i,N_y)
 
             ! given
-            !P(i,0) = P(i,1)        ! Bottom wall
-            P(i,0) = 0.d0          ! Free stream
+            P(i,0) = P(i,1)        ! Bottom wall
+            !P(i,0) = 0.d0          ! Free stream
             P(i,N_y+1) = 0.d0      ! Free stream
 
 
         end forall
-
+    !    forall(i=0:N_leadIn)
+    !        P(i,0) = 0.d0
+    !    end forall
         forall (j=0:N_y+1) ! left and righ
             ! TAs
             !P(0,j) = P(1,j)

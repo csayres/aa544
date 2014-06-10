@@ -410,7 +410,7 @@ class DataMuncher(object):
         # xi = numpy.linspace(min(x), max(x), 1000)
         # yi = numpy.linspace(min(y), max(y), 2000)
 
-        cmap = plt.get_cmap('winter')
+        #cmap = plt.get_cmap('winter')
         #cmap = plt.get_cmap('hot')
 
         # X, Y = numpy.meshgrid(xi, yi)
@@ -435,9 +435,9 @@ class DataMuncher(object):
             # note
             # plt.contourf(X, Y, Z, cmap=cmap, vmin=vmin, vmax=vmax)#, norm=norm)
             # plt.imshow(Z.T, cmap=cmap, vmin=-.5, vmax=1.5)
-            plt.pcolormesh(X, Y, Z, cmap=cmap, vmin=vmin, vmax=vmax, norm=None)#, cmap=cmap)#, norm=norm)
+            plt.pcolormesh(X, Y, Z, vmin=vmin, vmax=vmax, norm=None)#, cmap=cmap)#, norm=norm)
             # img = plot.imshow()
-            self.plotLagPoints()
+            #self.plotLagPoints()
 
         plt.colorbar()
         plt.title(figTitle)
@@ -638,10 +638,12 @@ if __name__ == "__main__":
     # x.makeColorMaps()
     # x.plotResidSemiLog("resid")
 
-    elJefe = elJefe("/Volumes/Boof/AA/_output_lowres")
-    elJefe.movieReynoldsSweep(reRange=[70, 100, 125, 150, 175, 200, 300], aspectRatio=2, u_v_or_p="u")
+    elJefe = elJefe("_output")
+    #elJefe.movieReynoldsSweep(reRange=[70, 100, 125, 150, 175, 200, 300], aspectRatio=2, u_v_or_p="u")
     #for dm in elJefe.jefeList:
-    #dm = elJefe.filterDataMunchers(re=150, aspectRatio=1)
+    dm = elJefe.jefeList[0]
+    elJefe.makeColorMaps(dm, j="u", fast=False)
+    dm.plotResidSemiLog("resid")
     # dm.plotTimeseries(150, 270, 1)
     # dm.plotTimeseries(155, 270, 2)
     # dm.plotTimeseries(160, 270, 3)
