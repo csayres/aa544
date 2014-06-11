@@ -343,9 +343,181 @@ contains
 
     end subroutine output_force_grid
 
-
-
 end module grid_module
+
+!calculate values for a tensor
+subroutine geta_11(i,j,nx,ny,h,u,v,nu_t,a_11)
+    implicit none
+    integer, intent(in) :: i,j,nx,ny
+    double precision, intent(in) :: h
+    double precision, dimension(0:nx+1,0:ny+1), intent(in) :: u,v,nu_t
+    double precision, intent(out)::a_11
+    a_11 = -2.d0*nu_t(i,j)*(u(i,j)-u(i-1,j))/h
+end subroutine geta_11
+
+subroutine geta_22(i,j,nx,ny,h,u,v,nu_t,a_22)
+    implicit none
+    integer, intent(in) :: i,j,nx,ny
+    double precision, intent(in) :: h
+    double precision, dimension(0:nx+1,0:ny+1), intent(in) :: u,v,nu_t
+    double precision, intent(out)::a_22
+    a_22 = -2.d0*nu_t(i,j)*(v(i,j)-v(i,j-1))/h
+end subroutine geta_22
+
+subroutine geta_12(i,j,nx,ny,h,u,v,nu_t,a_12)
+    implicit none
+    integer, intent(in) :: i,j,nx,ny
+    double precision, intent(in) :: h
+    double precision, dimension(0:nx+1,0:ny+1), intent(in) :: u,v,nu_t
+    double precision, intent(out)::a_12
+    a_12 = -(nu_t(i,j) + nu_t(i+1,j) + nu_t(i,j+1) + nu_t(i+1,j+1))/4.d0*(u(i,j+1)-u(i,j) + v(i+1,j)-v(i,j))/h
+end subroutine geta_12
+
+subroutine geta_21(i,j,nx,ny,h,u,v,nu_t,a_21)
+    implicit none
+    integer, intent(in) :: i,j,nx,ny
+    double precision, intent(in) :: h
+    double precision, dimension(0:nx+1,0:ny+1), intent(in) :: u,v,nu_t
+    double precision, intent(out)::a_21
+    call geta_12(i,j,nx,ny,h,u,v,nu_t,a_21)
+end subroutine geta_21
+
+subroutine nu_t_in(i,j,nx,ny, h, y,P,u,v,rho,nu,nu_t)
+    implicit none
+    integer, intent(in) :: i,j,nx,ny
+    double precision, intent(in) :: h, rho, nu
+    double precision, dimension(0:ny+1), intent(in) :: y
+    double precision, dimension(0:nx+1,0:ny+1), intent(in) :: u,v,P
+    double precision, intent(out)::nu_t
+    !local
+    double precision :: du_dy, dv_dx, l
+    du_dy = ((u(i,j+1) + u(i-1,j-1))/2.d0 - (u(i,j-1) + u(i-1,j-1))/2.d0 )/(2.d0*h)
+    dv_dx = ((v(i-1,j-1)+v(i-1,j))/2.d0 - (v(i+1,j)+v(i+1,j-1))/2.d0 )/(2.d0*h)
+    call lm(i,j,y,P,u,rho, nu, l)
+    nu_t = l**2*sqrt(du_dy**2+dv_dx**2)
+end subroutine nu_t_in
+
+subroutine getTao_omega(i,nx,ny,h,u,rho, nu,tao_omega) !wall sheer stress. evaluated at y=0
+    implicit none
+    integer, intent(in) :: i,nx,ny
+    double precision, intent(in) :: h,rho, nu
+    double precision, dimension(0:nx+1,0:ny+1)::u
+    double precision, intent(out) :: tao_omega
+    !local
+    double precision :: du_dy
+    du_dy = ((u(i,1) + u(i-1,1))/2.d0 - (u(i,0) + u(i-1,0))/2.d0 )/(h)
+
+    tao_omega = rho*nu*du_dy
+end subroutine getTao_omega
+
+subroutine getU_tao(i,nx,ny,h,u,rho, nu,u_tao) !friction velocity
+    implicit none
+    integer, intent(in) :: i,nx,ny
+    double precision, intent(in) :: h,rho, nu
+    double precision, dimension(0:nx+1,0:ny+1)::u
+    double precision, intent(out)::u_tao
+    !local
+    double precision :: t_w
+    call getTao_omega(i,nx,ny,h,u,rho, nu,t_w)
+    u_tao = sqrt(t_w/rho)
+end subroutine getU_tao
+
+subroutine getA_plus(i,j,nx,ny,h,y,P,u,rho,nu,a_plus) !friction velocity
+    implicit none
+    integer, intent(in) :: i,j,nx,ny
+    double precision, intent(in) :: h, rho, nu
+    double precision, dimension(0:ny+1), intent(in) :: y
+    double precision, dimension(0:nx+1,0:ny+1), intent(in) :: u,P
+    double precision, intent(out) :: a_plus
+    !local
+    double precision :: dp_dx, u_t,t_w
+    call getU_tao(i,nx,ny,h,u,rho, nu, u_t)
+    dp_dx = (P(i+1,j)-P(i-1,j))/(2.0*h)
+    call getTao_omega(i,nx,ny,h,u,rho, nu,t_w)
+    a_plus = 26.d0/sqrt(1.d0+y(j)*dp_dx/(rho*t_w**2))
+end subroutine getA_plus
+
+subroutine getY_plus(i,j,nx,ny,h,y,u,rho, nu,y_plus) !friction velocity
+    implicit none
+    integer, intent(in) :: i,j,nx,ny
+    double precision, intent(in) :: h, rho, nu
+    double precision, dimension(0:ny+1), intent(in) :: y
+    double precision, dimension(0:nx+1,0:ny+1), intent(in) :: u
+    double precision, intent(out) :: y_plus
+    !local
+    double precision:: t_w
+    call getTao_omega(i,nx,ny,h,u,rho, nu,t_w)
+    y_plus = y(j) / (nu*sqrt(rho/t_w))
+end subroutine getY_plus
+
+subroutine lm(i,j,nx,ny,h,y,P,u,rho, nu, l) !friction velocity
+    implicit none
+    integer, intent(in) :: i,j,nx,ny
+    double precision, intent(in) :: h, rho, nu
+    double precision, dimension(0:ny+1), intent(in) :: y
+    double precision, dimension(0:nx+1,0:ny+1), intent(in) :: u,P
+    double precision, intent(out) :: l
+    !local
+    double precision :: K, yp, ap
+    K = 0.40
+    call getY_plus(i,j,nx,ny,h,y,u,rho, nu,yp)
+    call getA_plus(i,j,nx,ny,h,y,P,u,rho,nu, ap)
+    l = K*y(j)*(1.d0 - exp(-yp/ap))
+end subroutine lm
+
+subroutine nu_t_out(i,j,nx,ny,h,y,P,u,v,rho,nu,Ue, nu_t)
+    implicit none
+    integer, intent(in) :: i,j,nx,ny
+    double precision, intent(in) :: h, rho, nu, Ue
+    double precision, dimension(0:ny+1), intent(in) :: y
+    double precision, dimension(0:nx+1,0:ny+1), intent(in) :: u,P,v
+    double precision, intent(out) :: nu_t
+    !local
+    double precision :: alpha, mt, fk
+    alpha = 0.0168
+    call momentumThick(i,nx,ny,h,u,Ue, mt)
+    call fkleb(i,j,nx,ny,y,u,Ue,fk)
+    nu_t = alpha*Ue*mt*fk
+end subroutine nu_t_out
+
+subroutine momentumThick(i,nx,ny,h,u,Ue, mt)
+    implicit none
+    integer, intent(in) :: i,nx,ny
+    double precision, intent(in) :: h, Ue
+    double precision, dimension(0:nx+1,0:ny+1), intent(in) :: u
+    double precision, intent(out) :: mt
+    !local
+    double precision :: theSum
+    integer :: j
+    theSum = 0.d0
+    ! intetrate over all at center location i (average left and right u)
+    do j=1,ny
+        theSum = theSum + (1 - (u(i,j)+u(i-1,j))/2.0/Ue)*h
+    enddo
+    mt = theSum
+end subroutine momentumThick
+
+subroutine flkeb(i,j,nx,ny,y,u,Ue,fk)
+    implicit none
+    integer, intent(in) :: i,j,nx,ny
+    double precision, intent(in) :: Ue
+    double precision, dimension(0:ny+1), intent(in) :: y
+    double precision, dimension(0:nx+1,0:ny+1), intent(in) :: u
+    double precision, intent(out) :: fk
+    !local
+    double precision :: delta
+    integer :: jj
+    ! intetrate over all at center location i (average left and right u), find out where it approximately
+    ! equals Ue
+    do jj=1,ny
+        delta = (u(i,jj)+u(i-1,jj))/2.0
+        if (delta >= 0.99*Ue) exit
+    enddo
+    ! delta is a y value
+    delta = y(jj)
+    fk = 1.d0/(1.d0 + 5.5 * (y(j)/delta)**6)
+end subroutine flkeb
+
 
 ! =========================================
 !  Program:     /Users/mandli/Documents/School/grad/ns_course
@@ -382,16 +554,19 @@ program main
     ! Velocity and pressures
     double precision, allocatable :: u(:,:),v(:,:),p(:,:),u_star(:,:),v_star(:,:)
     double precision, allocatable :: u_old(:,:), v_old(:,:)
+    integer, allocatable :: nu_t_flag(:) ! boolean array, for using nu_t in or out 0 = in 1 = out
 
     ! ===================================
     ! Locals
     character*20 :: arg
     integer :: i,ii,j,jj,n,m,frame,i_R,j_R, k, boxLen, maxIterNorm
     double precision :: R,t,dt,a, lagFuSum, lagFvSum
-    double precision, allocatable :: Flux_ux(:,:),Flux_uy(:,:),Flux_vy(:,:)
+    double precision, allocatable :: Flux_ux(:,:),Flux_uy(:,:),Flux_vy(:,:),nu_t(:,:)
     double precision :: uu_x,uv_y,uv_x,vv_y,u_xx,u_yy,v_xx,v_yy
     double precision, allocatable :: Q(:,:),b(:),cp(:),cm(:), ustar_lagF(:), vstar_lagF(:)
-    double precision :: xGrid, yGrid, xLag, yLag
+    double precision :: xGrid, yGrid, xLag, yLag, turbViscIn, turbViscOut, turbVisc
+    double precision :: a_11a,a_12a,a_21a,a_22a,a_11b,a_12b,a_21b,a_22b
+    double precision :: da11_dx, da12_dy, da21_dx, da22_dy
     ! ===================================
 
     ! Get command line arguments
@@ -468,8 +643,9 @@ program main
     allocate(u(0:N_x+1,0:N_y+1),u_star(0:N_x+1,0:N_y+1))
     allocate(v(0:N_x+1,0:N_y+1),v_star(0:N_x+1,0:N_y+1))
     allocate(p(0:N_x+1,0:N_y+1))
+    allocate(nu_t(0:N_x+1,0:N_y+1))
     allocate(u_old(1:N_x,1:N_y),v_old(1:N_x,1:N_y))
-
+    allocate(nu_t_flag(1:N_x))
     ! velocity at lagrangian points
     allocate(ustar_lagF(1:(n_lagrangian_points)))
     allocate(vstar_lagF(1:(n_lagrangian_points)))
@@ -486,6 +662,7 @@ program main
     !enddo
     v = 0.d0
     p = 0.d0
+    nu_t = 0.d0
 
     !Re = 100.0
     nu = (U_inf*HL_y)/Re
@@ -509,6 +686,7 @@ program main
     ! Main algorithm loop
     do n=1,MAX_ITERATIONS
         ! Store old step for convergence test
+        nu_t_flag = 0
         u_old = u(1:N_x,1:N_y)
         v_old = v(1:N_x,1:N_y)
 
@@ -546,6 +724,24 @@ program main
         forall (i=0:N_x+1,j=0:N_y) Flux_vy(i,j) = (v(i,j+1) + v(i,j))**2 / 4.d0
         do j=1,N_y
             do i=1,N_x
+                ! turbulent viscocity terms
+                ! first determine whether to use nu_t in or out
+                call nu_t_out(i,j,N_x,N_y,h,y_center,P,u,v,rho,nu,U_inf,turbVisc)
+                if (nu_t_flag(j)==0) then
+                    ! calculate both nu_t versions
+                    call nu_t_in(i,j,N_x,N_y, h, y_center,P,u,v,rho,nu,turbViscIn)
+                    if (abs(1.d0 - turbVisc/turbViscIn)<=0.1) then
+                        ! switch to outer
+                        nu_t_flag(j)=1
+                    else
+                        turbVisc = turbViscIn
+                    end if
+                end if
+                nu_t(i,j) = turbVisc
+            enddo
+        enddo
+        do j=1,N_y
+            do i=1,N_x
                 ! Advective terms, see Lecture 4 notes, page 12
                 uu_x = (Flux_ux(i+1,j) - Flux_ux(i,j)) / h
                 uv_y = 1.d0 * (Flux_uy(i,j) - Flux_uy(i,j-1)) / h !
@@ -559,9 +755,28 @@ program main
                 v_xx = (v(i+1,j) - 2.d0*v(i,j) + v(i-1,j)) / (h**2)
                 v_yy = (1.d0 / h**2) * (1.d0 * (v(i,j+1) - v(i,j)) - 1.d0 * (v(i,j) - v(i,j-1)))
 
+                !! solve for a_ij's
+                call geta_11(i+1,j,N_x,N_y,h,u,v,nu_t,a_11a)
+                call geta_11(i-1,j,N_x,N_y,h,u,v,nu_t,a_11b)
+
+                call geta_12(i,j+1,N_x,N_y,h,u,v,nu_t,a_12a)
+                call geta_12(i,j-1,N_x,N_y,h,u,v,nu_t,a_12b)
+
+                call geta_21(i+1,j,N_x,N_y,h,u,v,nu_t,a_21a)
+                call geta_21(i-1,j,N_x,N_y,h,u,v,nu_t,a_21b)
+
+                call geta_22(i,j+1,N_x,N_y,h,u,v,nu_t,a_22a)
+                call geta_22(i,j-1,N_x,N_y,h,u,v,nu_t,a_22b)
+
+                ! solve d_a11/dx
+                da11_dx = (a_11a - a_11b)/(2*h)
+                da12_dy = (a_12a - a_12b)/(2*h)
+                da21_dx = (a_21a - a_21b)/(2*h)
+                da22_dy = (a_22a - a_22b)/(2*h)
+
                 ! Update to u* and v* values
-                u_star(i,j) = u(i,j) + dt * (-(uu_x + uv_y) + nu*(u_xx + u_yy))
-                v_star(i,j) = v(i,j) + dt * (-(uv_x+vv_y) + nu*(v_xx + v_yy))
+                u_star(i,j) = u(i,j) + dt * (-(uu_x + uv_y + da11_dx + da12_dy) + nu*(u_xx + u_yy))
+                v_star(i,j) = v(i,j) + dt * (-(uv_x+vv_y + da21_dx + da22_dy) + nu*(v_xx + v_yy))
             enddo
         enddo
 
