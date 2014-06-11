@@ -730,10 +730,10 @@ program main
                     ! first determine whether to use nu_t in or out
                     call nu_t_out(i,j,N_x,N_y,h,y_center,P,u,v,rho,nu,U_inf,turbVisc)
                     call nu_t_in(i,j,N_x,N_y, h, y_center,P,u,v,rho,nu,turbViscIn)
-                    if(i==N_x/2) then
-                        print *, turbVisc, turbViscIn
-                    endif
-                    if (nu_t_flag(j)==0) then
+                !    if(i==N_x/2) then
+                !        print *, turbVisc, turbViscIn
+                !    endif
+                    if (nu_t_flag(i)==0) then
                         ! calculate both nu_t versions
                         if (abs(1.d0 - turbVisc/turbViscIn)<=0.2) then
                             nu_t_flag(i)=1
@@ -766,7 +766,7 @@ program main
                 v_xx = (v(i+1,j) - 2.d0*v(i,j) + v(i-1,j)) / (h**2)
                 v_yy = (1.d0 / h**2) * (1.d0 * (v(i,j+1) - v(i,j)) - 1.d0 * (v(i,j) - v(i,j-1)))
 
-                if(turbulenceOn==1 .AND. i>=N_x/3 .AND. i<2*N_x/3) then
+                if(turbulenceOn==1 .AND. i>=N_x/3 .AND. i<2*N_x/3 .AND. j<N_y/2) then
                     !! solve for a_ij's
                     call geta_11(i+1,j,N_x,N_y,h,u,v,nu_t,a_11a)
                     call geta_11(i-1,j,N_x,N_y,h,u,v,nu_t,a_11b)
@@ -850,15 +850,15 @@ program main
             print "(a,i3,a,i4,a,e16.8)","Writing frame ",frame," during step n=",n," t=",t
         endif
         ! Check tolerance
-        if (R < TOLERANCE) then
+        if (R < TOLERANCE .AND. turbulenceOn==0) then
             print *, "Convergence reached, R = ",R, "Turbulence turning on!"
             call output_grid(frame,t,u,v,p)
             print "(a,i3,a,i4,a,e16.8)","Writing frame ",frame," during step n=",n," t=",t
             turbulenceOn = 1
-            n_steps = 1
-            if (R==0.d0) then
-                exit
-            endif
+            n_steps = 2
+        endif
+        if (R==0.d0) then
+            exit
         endif
         ! We did not reach our tolerance, iterate again
         t = t + dt
