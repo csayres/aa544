@@ -564,7 +564,7 @@ program main
     double precision, allocatable :: Q(:,:),b(:),cp(:),cm(:), ustar_lagF(:), vstar_lagF(:)
     double precision :: xGrid, yGrid, xLag, yLag, turbViscIn, turbViscOut, turbVisc
     double precision :: a_11a,a_12a,a_21a,a_22a,a_11b,a_12b,a_21b,a_22b
-    double precision :: da11_dx, da12_dy, da21_dx, da22_dy, tao_omega
+    double precision :: da11_dx, da12_dy, da21_dx, da22_dy, tao_omega,yplus,utao
     ! ===================================
 
     ! Get command line arguments
@@ -680,7 +680,7 @@ program main
     ! Open up file to store residual information in
     open(unit=13, file='_output/residual_'//fileSuffix//'.dat', status="unknown", action="write")
     open(unit=80,file='_output/skinfriction_'//fileSuffix//'.dat',access='sequential',status='unknown')
-
+    open(unit=90,file='_output/vonKarman_'//fileSuffix//'.dat',access='sequential',status='unknown')
     turbulenceOn = 0
 
     ! ===================================
@@ -853,10 +853,19 @@ program main
                 call getTao_omega(i,N_x,N_y,h,u,1.d0,nu,tao_omega)
                 write(80,"(5e26.16)") x_edge(i),tao_omega
             enddo
+            if(turbulenceOn==1) then
+                write(90,*) "!step ", n
+                do j=1,N_y/2
+                    call getY_plus(N_x/2,j,N_x,N_y,h,y_center,u,rho, nu,yplus)
+                    call getU_tao(N_x/2,N_x,N_y,h,u,rho,nu,utao)
+                    write(90,"(5e26.16)") yplus, u(N_x/2,j)/utao
+                enddo
+            endif
             print "(a,i3,a,i4,a,e16.8)","Writing frame ",frame," during step n=",n," t=",t
         endif
         ! Check tolerance
-        if(MAX_ITERATIONS/n==2) then
+        if(n==MAX_ITERATIONS/2) then
+            print *,"Turbulence on!!!!!"
             turbulenceOn = 1
         endif
      !   if (R < TOLERANCE .AND. turbulenceOn==0) then
@@ -884,6 +893,7 @@ program main
     close(13)
     close(70)
     close(80)
+    close(90)
     print *, "!!!!!!!!!!!!!!!!!!!1END!!!!!!!!!!!!!!!", fileSuffix
 end program main
 
