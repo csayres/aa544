@@ -393,7 +393,7 @@ subroutine nu_t_in(i,j,nx,ny, h, y,P,u,v,rho,nu,nu_t)
     double precision :: du_dy, dv_dx, l
     du_dy = ((u(i,j+1) + u(i-1,j-1))/2.d0 - (u(i,j-1) + u(i-1,j-1))/2.d0 )/(2.d0*h)
     dv_dx = ((v(i-1,j-1)+v(i-1,j))/2.d0 - (v(i+1,j)+v(i+1,j-1))/2.d0 )/(2.d0*h)
-    call lm(i,j,y,P,u,rho, nu, l)
+    call lm(i,j,nx,ny,h,y,P,u,rho, nu, l)
     nu_t = l**2*sqrt(du_dy**2+dv_dx**2)
 end subroutine nu_t_in
 
