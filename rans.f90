@@ -539,7 +539,7 @@ program main
 
     ! ====================================
     ! Solver parameters
-    integer, parameter :: MAX_ITERATIONS = 100000
+    integer, parameter :: MAX_ITERATIONS = 10000
     double precision, parameter :: TOLERANCE = 1d-5, CFL = 0.02
     logical, parameter :: write_star = .false.
     integer :: n_steps
@@ -737,9 +737,9 @@ program main
                         ! calculate both nu_t versions
                         if (abs(1.d0 - turbVisc/turbViscIn)<=0.2) then
                             nu_t_flag(i)=1
-                            if(i==N_x/2) then
-                                print *, "switched!!!!!"
-                            endif
+                !            if(i==N_x/2) then
+                !                print *, "switched!!!!!"
+                !            endif
                         else
                             turbVisc = turbViscIn
                         end if
@@ -850,13 +850,16 @@ program main
             print "(a,i3,a,i4,a,e16.8)","Writing frame ",frame," during step n=",n," t=",t
         endif
         ! Check tolerance
-        if (R < TOLERANCE .AND. turbulenceOn==0) then
-            print *, "Convergence reached, R = ",R, "Turbulence turning on!"
-            call output_grid(frame,t,u,v,p)
-            print "(a,i3,a,i4,a,e16.8)","Writing frame ",frame," during step n=",n," t=",t
+        if(MAX_ITERATIONS/n==2) then
             turbulenceOn = 1
-            n_steps = 2
         endif
+     !   if (R < TOLERANCE .AND. turbulenceOn==0) then
+     !       print *, "Convergence reached, R = ",R, "Turbulence turning on!"
+     !       call output_grid(frame,t,u,v,p)
+     !       print "(a,i3,a,i4,a,e16.8)","Writing frame ",frame," during step n=",n," t=",t
+     !       turbulenceOn = 1
+     !       n_steps = 2
+     !   endif
         if (R==0.d0) then
             exit
         endif
