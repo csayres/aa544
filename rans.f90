@@ -286,7 +286,6 @@ contains
         ! Write out data
         do j=1,N_y
         do i=1,N_x
-
         ! Reset to zero if exponent is too large
         if (abs(u(i,j)) < 1d-99) u(i,j) = 0.d0
         if (abs(v(i,j)) < 1d-99) v(i,j) = 0.d0
@@ -539,7 +538,7 @@ program main
 
     ! ====================================
     ! Solver parameters
-    integer, parameter :: MAX_ITERATIONS = 10000
+    integer, parameter :: MAX_ITERATIONS = 20000
     double precision, parameter :: TOLERANCE = 1d-5, CFL = 0.02
     logical, parameter :: write_star = .false.
     integer :: n_steps
@@ -565,7 +564,7 @@ program main
     double precision, allocatable :: Q(:,:),b(:),cp(:),cm(:), ustar_lagF(:), vstar_lagF(:)
     double precision :: xGrid, yGrid, xLag, yLag, turbViscIn, turbViscOut, turbVisc
     double precision :: a_11a,a_12a,a_21a,a_22a,a_11b,a_12b,a_21b,a_22b
-    double precision :: da11_dx, da12_dy, da21_dx, da22_dy
+    double precision :: da11_dx, da12_dy, da21_dx, da22_dy, tao_omega
     ! ===================================
 
     ! Get command line arguments
@@ -598,7 +597,7 @@ program main
     L_y = 300  !Length of box in y-direction
 
 
-    n_steps = MAX_ITERATIONS/100 !Interval that u,v and p are printed to UVP.dat
+    n_steps = MAX_ITERATIONS/500 !Interval that u,v and p are printed to UVP.dat
 
 
 
@@ -680,6 +679,7 @@ program main
 
     ! Open up file to store residual information in
     open(unit=13, file='_output/residual_'//fileSuffix//'.dat', status="unknown", action="write")
+    open(unit=80,file='_output/skinfriction_'//fileSuffix//'.dat',access='sequential',status='unknown')
 
     turbulenceOn = 0
 
@@ -847,6 +847,12 @@ program main
             call output_grid(frame,t,u,v,p)
             print *, "R = ", R
             write (13,"(i5,i4,i4,e16.8)") n,i_R,j_R,R
+            write(80,*) "!step ", n
+            do i=1,N_X
+                !print out t_w
+                call getTao_omega(i,N_x,N_y,h,u,1.d0,nu,tao_omega)
+                write(80,"(5e26.16)") x_edge(i),tao_omega
+            enddo
             print "(a,i3,a,i4,a,e16.8)","Writing frame ",frame," during step n=",n," t=",t
         endif
         ! Check tolerance
@@ -866,16 +872,18 @@ program main
         ! We did not reach our tolerance, iterate again
         t = t + dt
     enddo
-    if (R > TOLERANCE) then
-        print "(a,e16.8)","Convergence was never reached, R = ", R
-
-        call output_grid(frame,t,u,v,p) ! ouput last grid?
-    endif
+ !   if (R > TOLERANCE) then
+ !       print "(a,e16.8)","Convergence was never reached, R = ", R
+!
+ !       call output_grid(frame,t,u,v,p) ! ouput last grid?
+ !   endif
     print "(a,i3,a,i4,a,e16.8)","Tolerance reaced!, Writing frame ",frame," during step n=",n," t=",t
-    close(13)
-    close(70)
+
     !close(77)
     call output_grid(frame,t,u,v,p)
+    close(13)
+    close(70)
+    close(80)
     print *, "!!!!!!!!!!!!!!!!!!!1END!!!!!!!!!!!!!!!", fileSuffix
 end program main
 
