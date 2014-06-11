@@ -315,6 +315,8 @@ class DataMuncher(object):
                 else:
                     # split on whitespace, cast to floats
                     lineArray = [float(x) for x in line.split()]
+                    if len(lineArray)<5:
+                        break
                     if firstArray:
                         xArray.append(lineArray[0])
                         yArray.append(lineArray[1])

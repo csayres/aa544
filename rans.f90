@@ -393,7 +393,7 @@ subroutine nu_t_in(i,j,nx,ny, h, y,P,u,v,rho,nu,nu_t)
     double precision :: du_dy, dv_dx, l
     du_dy = ((u(i,j+1) + u(i-1,j-1))/2.d0 - (u(i,j-1) + u(i-1,j-1))/2.d0 )/(2.d0*h)
     dv_dx = ((v(i-1,j-1)+v(i-1,j))/2.d0 - (v(i+1,j)+v(i+1,j-1))/2.d0 )/(2.d0*h)
-    call lm(i,j,y,P,u,rho, nu, l)
+    call lm(i,j,nx,ny,h,y,P,u,rho, nu, l)
     nu_t = l**2*sqrt(du_dy**2+dv_dx**2)
 end subroutine nu_t_in
 
@@ -406,7 +406,6 @@ subroutine getTao_omega(i,nx,ny,h,u,rho, nu,tao_omega) !wall sheer stress. evalu
     !local
     double precision :: du_dy
     du_dy = ((u(i,1) + u(i-1,1))/2.d0 - (u(i,0) + u(i-1,0))/2.d0 )/(h)
-
     tao_omega = rho*nu*du_dy
 end subroutine getTao_omega
 
@@ -497,7 +496,7 @@ subroutine momentumThick(i,nx,ny,h,u,Ue, mt)
     mt = theSum
 end subroutine momentumThick
 
-subroutine flkeb(i,j,nx,ny,y,u,Ue,fk)
+subroutine fkleb(i,j,nx,ny,y,u,Ue,fk)
     implicit none
     integer, intent(in) :: i,j,nx,ny
     double precision, intent(in) :: Ue
@@ -516,7 +515,7 @@ subroutine flkeb(i,j,nx,ny,y,u,Ue,fk)
     ! delta is a y value
     delta = y(jj)
     fk = 1.d0/(1.d0 + 5.5 * (y(j)/delta)**6)
-end subroutine flkeb
+end subroutine fkleb
 
 
 ! =========================================
@@ -540,15 +539,15 @@ program main
 
     ! ====================================
     ! Solver parameters
-    integer, parameter :: MAX_ITERATIONS = 10000
-    double precision, parameter :: TOLERANCE = 1d-4, CFL = 0.02
+    integer, parameter :: MAX_ITERATIONS = 100000
+    double precision, parameter :: TOLERANCE = 1d-5, CFL = 0.02
     logical, parameter :: write_star = .false.
     integer :: n_steps
 
     ! ===================================
     ! Physics
     double precision :: U_inf = 1.d0
-    double precision :: rho,nu !rho = 1.d0, nu=1.d-3
+    double precision :: nu,rho != 1.d0, nu=1.d-3
 
     ! ===================================
     ! Velocity and pressures
@@ -559,7 +558,7 @@ program main
     ! ===================================
     ! Locals
     character*20 :: arg
-    integer :: i,ii,j,jj,n,m,frame,i_R,j_R, k, boxLen, maxIterNorm
+    integer :: i,ii,j,jj,n,m,frame,i_R,j_R, k, boxLen, maxIterNorm, turbulenceOn
     double precision :: R,t,dt,a, lagFuSum, lagFvSum
     double precision, allocatable :: Flux_ux(:,:),Flux_uy(:,:),Flux_vy(:,:),nu_t(:,:)
     double precision :: uu_x,uv_y,uv_x,vv_y,u_xx,u_yy,v_xx,v_yy
@@ -682,6 +681,8 @@ program main
     ! Open up file to store residual information in
     open(unit=13, file='_output/residual_'//fileSuffix//'.dat', status="unknown", action="write")
 
+    turbulenceOn = 0
+
     ! ===================================
     ! Main algorithm loop
     do n=1,MAX_ITERATIONS
@@ -722,24 +723,34 @@ program main
         forall (i=1:N_x+1,j=0:N_y+1) Flux_ux(i,j) = (u(i-1,j)+u(i,j))**2 / 4.d0
         forall (i=0:N_x,j=0:N_y) Flux_uy(i,j) = (u(i,j)+u(i,j+1)) * (v(i+1,j)+v(i,j)) / 4.d0
         forall (i=0:N_x+1,j=0:N_y) Flux_vy(i,j) = (v(i,j+1) + v(i,j))**2 / 4.d0
-        do j=1,N_y
-            do i=1,N_x
-                ! turbulent viscocity terms
-                ! first determine whether to use nu_t in or out
-                call nu_t_out(i,j,N_x,N_y,h,y_center,P,u,v,rho,nu,U_inf,turbVisc)
-                if (nu_t_flag(j)==0) then
-                    ! calculate both nu_t versions
+        if(turbulenceOn == 1) then
+            do j=1,N_y
+                do i=1,N_x
+                    ! turbulent viscocity terms
+                    ! first determine whether to use nu_t in or out
+                    call nu_t_out(i,j,N_x,N_y,h,y_center,P,u,v,rho,nu,U_inf,turbVisc)
                     call nu_t_in(i,j,N_x,N_y, h, y_center,P,u,v,rho,nu,turbViscIn)
-                    if (abs(1.d0 - turbVisc/turbViscIn)<=0.1) then
-                        ! switch to outer
-                        nu_t_flag(j)=1
-                    else
-                        turbVisc = turbViscIn
+                    if(i==N_x/2) then
+                        print *, turbVisc, turbViscIn
+                    endif
+                    if (nu_t_flag(j)==0) then
+                        ! calculate both nu_t versions
+                        if (abs(1.d0 - turbVisc/turbViscIn)<=0.2) then
+                            nu_t_flag(i)=1
+                            if(i==N_x/2) then
+                                print *, "switched!!!!!"
+                            endif
+                        else
+                            turbVisc = turbViscIn
+                        end if
                     end if
-                end if
-                nu_t(i,j) = turbVisc
+                    if(turbVisc/=turbVisc) then
+                        turbVisc = 0.d0
+                    endif
+                    nu_t(i,j) = turbVisc
+                enddo
             enddo
-        enddo
+        endif
         do j=1,N_y
             do i=1,N_x
                 ! Advective terms, see Lecture 4 notes, page 12
@@ -755,24 +766,31 @@ program main
                 v_xx = (v(i+1,j) - 2.d0*v(i,j) + v(i-1,j)) / (h**2)
                 v_yy = (1.d0 / h**2) * (1.d0 * (v(i,j+1) - v(i,j)) - 1.d0 * (v(i,j) - v(i,j-1)))
 
-                !! solve for a_ij's
-                call geta_11(i+1,j,N_x,N_y,h,u,v,nu_t,a_11a)
-                call geta_11(i-1,j,N_x,N_y,h,u,v,nu_t,a_11b)
+                if(turbulenceOn==1 .AND. i>=N_x/3 .AND. i<2*N_x/3) then
+                    !! solve for a_ij's
+                    call geta_11(i+1,j,N_x,N_y,h,u,v,nu_t,a_11a)
+                    call geta_11(i-1,j,N_x,N_y,h,u,v,nu_t,a_11b)
 
-                call geta_12(i,j+1,N_x,N_y,h,u,v,nu_t,a_12a)
-                call geta_12(i,j-1,N_x,N_y,h,u,v,nu_t,a_12b)
+                    call geta_12(i,j+1,N_x,N_y,h,u,v,nu_t,a_12a)
+                    call geta_12(i,j-1,N_x,N_y,h,u,v,nu_t,a_12b)
 
-                call geta_21(i+1,j,N_x,N_y,h,u,v,nu_t,a_21a)
-                call geta_21(i-1,j,N_x,N_y,h,u,v,nu_t,a_21b)
+                    call geta_21(i+1,j,N_x,N_y,h,u,v,nu_t,a_21a)
+                    call geta_21(i-1,j,N_x,N_y,h,u,v,nu_t,a_21b)
 
-                call geta_22(i,j+1,N_x,N_y,h,u,v,nu_t,a_22a)
-                call geta_22(i,j-1,N_x,N_y,h,u,v,nu_t,a_22b)
+                    call geta_22(i,j+1,N_x,N_y,h,u,v,nu_t,a_22a)
+                    call geta_22(i,j-1,N_x,N_y,h,u,v,nu_t,a_22b)
 
-                ! solve d_a11/dx
-                da11_dx = (a_11a - a_11b)/(2*h)
-                da12_dy = (a_12a - a_12b)/(2*h)
-                da21_dx = (a_21a - a_21b)/(2*h)
-                da22_dy = (a_22a - a_22b)/(2*h)
+                    ! solve d_a11/dx
+                    da11_dx = (a_11a - a_11b)/(2*h)
+                    da12_dy = (a_12a - a_12b)/(2*h)
+                    da21_dx = (a_21a - a_21b)/(2*h)
+                    da22_dy = (a_22a - a_22b)/(2*h)
+                else
+                    da11_dx = 0.d0
+                    da12_dy = 0.d0
+                    da21_dx = 0.d0
+                    da22_dy = 0.d0
+                endif
 
                 ! Update to u* and v* values
                 u_star(i,j) = u(i,j) + dt * (-(uu_x + uv_y + da11_dx + da12_dy) + nu*(u_xx + u_yy))
@@ -832,12 +850,16 @@ program main
             print "(a,i3,a,i4,a,e16.8)","Writing frame ",frame," during step n=",n," t=",t
         endif
         ! Check tolerance
-        !if (R < TOLERANCE) then
-            !print *, "Convergence reached, R = ",R
-            !call output_grid(frame,t,u,v,p)
-            !print "(a,i3,a,i4,a,e16.8)","Writing frame ",frame," during step n=",n," t=",t
-            !exit
-        !endif
+        if (R < TOLERANCE) then
+            print *, "Convergence reached, R = ",R, "Turbulence turning on!"
+            call output_grid(frame,t,u,v,p)
+            print "(a,i3,a,i4,a,e16.8)","Writing frame ",frame," during step n=",n," t=",t
+            turbulenceOn = 1
+            n_steps = 1
+            if (R==0.d0) then
+                exit
+            endif
+        endif
         ! We did not reach our tolerance, iterate again
         t = t + dt
     enddo
